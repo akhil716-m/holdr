@@ -509,38 +509,6 @@ function Sparkline({ data, id, width = 96, height = 28, mono = true, positive = 
   );
 }
 
-/* sector list — Fey home style: name, delta, tiny bar */
-function SectorList({ holdings }) {
-  const maxAbs = Math.max(...SECTOR_PULSE.map(s => Math.abs(s.chg)));
-  const heldSectors = new Set(holdings.map(h => h.sector));
-  return (
-    <div className="space-y-[2px]">
-      {SECTOR_PULSE.map((s, i) => {
-        const up = s.chg >= 0;
-        const held = s.holdsSector && heldSectors.has(s.holdsSector);
-        return (
-          <div key={i} className="flex items-center gap-3 px-2.5 py-[7px] rounded-lg hov cursor-default">
-            <span className="w-1 h-1 rounded-full shrink-0" style={{ background: held ? 'var(--accent)' : 'transparent' }}></span>
-            <p className={`text-[12px] flex-1 truncate ${held ? '' : 'text-muted'}`}>{s.name}</p>
-            <span className="num text-[11px] font-medium w-[52px] text-right" style={{ color: up ? 'var(--up)' : 'var(--down)' }}>
-              {up ? '+' : ''}{s.chg.toFixed(1)}%
-            </span>
-            <div className="w-[64px] h-[10px] flex items-center gap-[2px] justify-end shrink-0">
-              {Array.from({ length: 8 }, (_, j) => {
-                const filled = j < Math.round((Math.abs(s.chg) / maxAbs) * 8);
-                return <span key={j} className="w-[4px] h-full rounded-[1px]"
-                  style={{ background: filled ? (up ? 'var(--up)' : 'var(--down)') : 'var(--border)', opacity: filled ? 0.85 : 1 }}></span>;
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ============================ DAILY RECAP ================================== */
-/* prose digest — Fey's editorial recap, generated from portfolio state */
 /* ========================= MARKET INFLUENCES =============================== */
 /* macro tiles + FII/DII flows — the forces behind today's mood */
 function MarketPulse() {
@@ -1513,12 +1481,8 @@ function App() {
               </h1>
             </section>
 
-            {/* macro influences — what's setting the mood today */}
-            <section className="mt-6">
-              <MarketPulse />
-            </section>
-
-            <section className="mt-3 grid lg:grid-cols-5 gap-3 items-stretch">
+            {/* ① your money + ② what needs attention */}
+            <section className="mt-6 grid lg:grid-cols-5 gap-3 items-stretch">
               {/* chart card */}
               <div className="lg:col-span-3 surface rounded-2xl overflow-hidden flex flex-col">
                 <div className="p-5 pb-0">
@@ -1533,7 +1497,7 @@ function App() {
                   </div>
                 </div>
                 <div className="mt-3 flex-1">
-                  <CompareChart key={period} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={220} />
+                  <CompareChart key={period} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={252} />
                 </div>
                 <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: '1px solid var(--border)' }}>
                   <div className="flex items-center gap-1">
@@ -1549,27 +1513,28 @@ function App() {
                     {totals.needsReview ? <span style={{ color: 'var(--down)' }}>{totals.needsReview} flagged</span> : 'all clear'} · {holdings.length} positions
                   </span>
                 </div>
-                {/* sector list inside the chart card, like Fey's home */}
-                <div className="px-3 pb-3 pt-1" style={{ borderTop: '1px solid var(--border)' }}>
-                  <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold px-2.5 pt-3 pb-1.5">Sectors · 3M momentum</p>
-                  <SectorList holdings={holdings} />
-                </div>
               </div>
 
-              {/* right rail: recap + feed */}
+              {/* right rail: recap (attention) + news (what's moving yours) */}
               <div className="lg:col-span-2 flex flex-col gap-3">
                 <DailyRecap holdings={holdings} totals={totals} mode={investorMode} />
                 <div className="surface rounded-2xl p-5 flex-1 min-h-0">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-faint">Your holdings in the news</p>
                   </div>
-                  <div className="overflow-y-auto max-h-[480px] pr-1">
+                  <div className="overflow-y-auto max-h-[300px] pr-1">
                     {NEWS_FEED.map((item, i) => (
                       <NewsRow key={i} item={item} holding={holdings.find(h => h.id === item.stockId) || null} last={i === NEWS_FEED.length - 1} />
                     ))}
                   </div>
                 </div>
               </div>
+            </section>
+
+            {/* ③ the market around you — context after your own money */}
+            <section className="mt-8">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-faint font-semibold mb-3">The market around you</p>
+              <MarketPulse />
             </section>
           </div>
         )}
