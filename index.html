@@ -578,7 +578,37 @@ function TaxView({ holdings }) {
       body: `Your LT gains are already exempt — booking this ${fmtINR(Math.round(Math.abs(t.gain)))} loss now is wasted. It carries forward 8 years.`,
       stocks: [h], visual: null });
   });
-  moves.sort((a, b) => (b.save || 0) - (a.save || 0));
+  /* loss timing — an ST loss is more flexible than an LT one; book before it converts */
+  harvestables.filter(r => !r.t.isLT && r.t.daysToLT <= 270).forEach(({ h, t }) => {
+    moves.push({ tone: 'warn', save: null,
+      head: `Book ${h.symbol}'s loss while it's still short-term`,
+      body: `After ${ltDate(h)} it becomes a long-term loss, which can only offset LT gains. Short-term losses offset any gain.`,
+      stocks: [h],
+      visual: { type: 'ring', held: t.heldDays, days: t.daysToLT } });
+  });
+  /* LT gains exceeding the exemption — split selling across FYs */
+  if (ltTaxable > 0) {
+    moves.push({ tone: 'up', save: Math.min(ltTaxable, LTCG_EXEMPTION) * LTCG_RATE,
+      head: 'Split your LT selling across two financial years',
+      body: `${fmtINR(Math.round(ltTaxable))} of LT gains exceed this year's exemption. Sell up to ₹1.25L now and the rest after Apr 1 to use next year's allowance too.`,
+      stocks: rows.filter(r => r.t.isLT && r.t.gain > 0).map(r => r.h), visual: null });
+  }
+  /* exemption deadline — unused room doesn't carry forward */
+  if (exemptionLeft > 0 && ltGain > 0) {
+    moves.push({ tone: 'faint', save: null,
+      head: 'Unused tax-free room expires 31 Mar',
+      body: `Your remaining ${fmtINR(Math.round(exemptionLeft))} of LT exemption resets every FY — it doesn't carry forward. If you plan to trim winners, this allowance is use-it-or-lose-it.`,
+      stocks: [], visual: null });
+  }
+  /* no wash-sale rule — harvesting doesn't mean exiting */
+  if (harvestables.length > 0) {
+    moves.push({ tone: 'faint', save: null,
+      head: "Harvesting a loss doesn't mean exiting the stock",
+      body: 'India has no wash-sale rule — you can book a loss and buy the same shares back immediately. Your position stays, the tax benefit is real.',
+      stocks: [], visual: null });
+  }
+  /* rank: rupee impact first, actionable before informational */
+  moves.sort((a, b) => ((b.save || 0) - (a.save || 0)) || ((a.tone === 'faint' ? 1 : 0) - (b.tone === 'faint' ? 1 : 0)));
 
   function ltDate(h) {
     return new Date(new Date(h.buyDate).getTime() + 365 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
@@ -627,10 +657,10 @@ function TaxView({ holdings }) {
         {/* smart moves — the hero column: ranked list, color only on savings */}
         <div className="lg:col-span-3 surface rounded-2xl p-5">
           <div className="flex items-center justify-between">
-            <p className="font-medium text-[13px] tracking-tight">Smart moves</p>
+            <p className="font-medium text-[13px] tracking-tight">Smart moves <span className="num text-faint font-normal">· {moves.length}</span></p>
             <span className="text-[10px] num text-faint uppercase tracking-[0.08em]">ranked by impact</span>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 overflow-y-auto pr-2" style={{ maxHeight: 430 }}>
             {moves.map((m, i) => (
               <div key={i} className="flex items-start gap-4 py-4" style={i < moves.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
                 <span className="num text-[11px] text-faint mt-[2px] w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
