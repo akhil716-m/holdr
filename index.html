@@ -534,83 +534,178 @@ function TaxView({ holdings }) {
   const ltGain = rows.filter(r => r.t.isLT && r.t.gain > 0).reduce((a, r) => a + r.t.gain, 0);
   const stGain = rows.filter(r => !r.t.isLT && r.t.gain > 0).reduce((a, r) => a + r.t.gain, 0);
   const losses = rows.filter(r => r.t.gain < 0).reduce((a, r) => a + r.t.gain, 0);
-  const ltTax = Math.max(0, ltGain - LTCG_EXEMPTION) * LTCG_RATE;
+  const ltTaxable = Math.max(0, ltGain - LTCG_EXEMPTION);
+  const ltTax = ltTaxable * LTCG_RATE;
   const stTax = stGain * STCG_RATE;
+  const totalTax = ltTax + stTax;
+  const netGain = ltGain + stGain + losses;
   const harvestables = rows.filter(r => r.t.gain < 0);
+  const exemptionUsed = Math.min(ltGain, LTCG_EXEMPTION);
+  const exemptionLeft = LTCG_EXEMPTION - exemptionUsed;
+  const stLosses = harvestables.filter(r => !r.t.isLT).reduce((a, r) => a + r.t.gain, 0);
+  const harvestSaving = Math.min(Math.abs(stLosses), stGain) * STCG_RATE;
+
+  /* smart moves — turn state into actions, ranked by rupee impact */
+  const moves = [];
+  if (ltGain > 0 && ltTaxable === 0) {
+    moves.push({ tone: 'up', save: null,
+      head: 'Your long-term gains are fully tax-free',
+      body: `${fmtINR(Math.round(ltGain))} of LT gains sit inside the ₹1.25L annual exemption — selling long-term winners today costs zero tax.` });
+  }
+  rows.filter(r => !r.t.isLT && r.t.gain > 0).forEach(({ h, t }) => {
+    const save = t.gain * (STCG_RATE - LTCG_RATE);
+    moves.push({ tone: 'warn', save,
+      head: `Hold ${h.symbol} ${t.daysToLT} more days`,
+      body: `Its ${fmtINR(Math.round(t.gain))} gain turns long-term on ${ltDate(h)} — the tax rate drops from 20% to 12.5%.` });
+  });
+  if (stLosses < 0 && stGain > 0) {
+    const names = harvestables.filter(r => !r.t.isLT).map(r => r.h.symbol).join(' + ');
+    moves.push({ tone: 'accent', save: harvestSaving,
+      head: `Pair ${names} losses against your ST gains`,
+      body: `Booking ${fmtINR(Math.round(Math.abs(stLosses)))} of short-term losses offsets your ${fmtINR(Math.round(stGain))} ST gains directly.` });
+  }
+  harvestables.filter(r => r.t.isLT).forEach(({ h, t }) => {
+    moves.push({ tone: 'faint', save: null,
+      head: `${h.symbol}'s LT loss has no benefit this year`,
+      body: `Your LT gains are already exempt — booking this ${fmtINR(Math.round(Math.abs(t.gain)))} loss now is wasted. If booked, it carries forward 8 years.` });
+  });
+  moves.sort((a, b) => (b.save || 0) - (a.save || 0));
+
+  function ltDate(h) {
+    return new Date(new Date(h.buyDate).getTime() + 365 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  }
+
+  /* stacked composition bar */
+  const compTotal = ltGain + stGain + Math.abs(losses) || 1;
+  const seg = v => `${(v / compTotal) * 100}%`;
 
   return (
-    <div className="grid lg:grid-cols-3 gap-3 fade-up">
-      <div className="surface rounded-2xl p-5">
-        <p className="font-medium text-[13px] tracking-tight">If you sold everything today</p>
-        <p className="text-[11px] text-faint mt-0.5">Indicative · equity delivery · FY26</p>
-        <div className="mt-5 space-y-3.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] text-muted">Long-term gains <span className="num text-faint">12.5%</span></span>
-            <span className="text-[12.5px] num">{fmtINR(Math.round(ltGain))}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] text-muted">Short-term gains <span className="num text-faint">20%</span></span>
-            <span className="text-[12.5px] num">{fmtINR(Math.round(stGain))}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] text-muted">Unbooked losses</span>
-            <span className="text-[12.5px] num" style={{ color: 'var(--down)' }}>{fmtINR(Math.round(losses))}</span>
-          </div>
-          <div className="pt-3.5 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
-            <span className="text-[12px] font-medium">Estimated tax</span>
-            <span className="text-[15px] num font-semibold" style={{ color: 'var(--warn)' }}>{fmtINR(Math.round(ltTax + stTax))}</span>
-          </div>
-          <p className="text-[11px] text-faint leading-[1.6]">First ₹1.25L of long-term gains each year is exempt. Losses can offset gains.</p>
-        </div>
-      </div>
-
-      <div className="surface rounded-2xl p-5">
-        <p className="font-medium text-[13px] tracking-tight">Long-term clock</p>
-        <p className="text-[11px] text-faint mt-0.5">Each holding's path to the 12.5% rate</p>
-        <div className="mt-5 space-y-4">
-          {rows.sort((a, b) => a.t.daysToLT - b.t.daysToLT).map(({ h, t }) => (
-            <div key={h.id}>
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] font-medium">{h.symbol}</span>
-                  {t.isLT ? <span className="text-[10px] num" style={{ color: 'var(--up)' }}>LT ✓</span>
-                          : <span className="text-[10px] num text-faint">{t.daysToLT}d left</span>}
-                </div>
-                <span className="text-[10px] num text-faint">{Math.min(t.heldDays, 365)}/365</span>
-              </div>
-              <div className="h-[3px] rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-                <div className="h-full rounded-full" style={{
-                  width: `${Math.min(100, (t.heldDays / 365) * 100)}%`,
-                  background: t.isLT ? 'var(--up)' : 'var(--accent)', opacity: 0.9,
-                }}></div>
-              </div>
+    <div className="fade-up">
+      {/* hero — the headline number plus composition */}
+      <div className="surface rounded-2xl p-5 sm:p-6 mb-3">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">If you sold everything today</p>
+            <div className="flex items-baseline gap-3 mt-2">
+              <p className="text-[32px] num font-medium tracking-tight leading-none" style={{ color: 'var(--warn)' }}>{fmtINR(Math.round(totalTax))}</p>
+              <span className="text-[12px] text-muted">tax on {fmtINR(Math.round(netGain))} net gains</span>
             </div>
-          ))}
+            <p className="text-[11px] text-faint mt-2">effective rate {netGain > 0 ? ((totalTax / netGain) * 100).toFixed(1) : '0.0'}% · indicative · equity delivery · FY26</p>
+          </div>
+          {/* exemption meter */}
+          <div className="min-w-[220px] flex-1 max-w-[320px]">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">₹1.25L LT exemption</span>
+              <span className="text-[10.5px] num" style={{ color: 'var(--up)' }}>{fmtINR(Math.round(exemptionLeft))} room left</span>
+            </div>
+            <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+              <div className="h-full rounded-full" style={{ width: `${(exemptionUsed / LTCG_EXEMPTION) * 100}%`, background: 'var(--up)' }}></div>
+            </div>
+            <p className="text-[10.5px] text-faint mt-1.5 leading-[1.5]">Only {((exemptionUsed / LTCG_EXEMPTION) * 100).toFixed(0)}% used — you can realise {fmtINR(Math.round(exemptionLeft))} more LT gains this FY tax-free.</p>
+          </div>
+        </div>
+        {/* composition bar */}
+        <div className="mt-5">
+          <div className="h-[8px] rounded-full overflow-hidden flex" style={{ background: 'var(--border)' }}>
+            <div style={{ width: seg(ltGain), background: 'var(--up)', opacity: .9 }}></div>
+            <div style={{ width: seg(stGain), background: 'var(--warn)', opacity: .9 }}></div>
+            <div style={{ width: seg(Math.abs(losses)), background: 'var(--down)', opacity: .85 }}></div>
+          </div>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2.5">
+            <span className="text-[10.5px] text-muted flex items-center gap-1.5"><span className="w-2 h-2 rounded-[3px]" style={{ background: 'var(--up)' }}></span>LT gains <span className="num">{fmtINR(Math.round(ltGain))}</span> <span className="num text-faint">· tax {fmtINR(Math.round(ltTax))}</span></span>
+            <span className="text-[10.5px] text-muted flex items-center gap-1.5"><span className="w-2 h-2 rounded-[3px]" style={{ background: 'var(--warn)' }}></span>ST gains <span className="num">{fmtINR(Math.round(stGain))}</span> <span className="num text-faint">· tax {fmtINR(Math.round(stTax))}</span></span>
+            <span className="text-[10.5px] text-muted flex items-center gap-1.5"><span className="w-2 h-2 rounded-[3px]" style={{ background: 'var(--down)' }}></span>Unbooked losses <span className="num">{fmtINR(Math.round(losses))}</span></span>
+          </div>
         </div>
       </div>
 
-      <div className="surface rounded-2xl p-5">
-        <p className="font-medium text-[13px] tracking-tight">Loss harvesting</p>
-        <p className="text-[11px] text-faint mt-0.5">Losses you could book to offset gains</p>
-        {harvestables.length ? (
+      <div className="grid lg:grid-cols-3 gap-3">
+        {/* smart moves — the actions */}
+        <div className="surface rounded-2xl p-5">
+          <div className="flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full pulse-dot" style={{ background: 'var(--accent)', color: 'var(--accent)' }}></span>
+            <p className="font-medium text-[13px] tracking-tight">Smart moves</p>
+          </div>
+          <p className="text-[11px] text-faint mt-0.5">What the numbers suggest, ranked by impact</p>
           <div className="mt-4 space-y-2">
-            {harvestables.map(({ h, t }) => (
-              <div key={h.id} className="surface-2 rounded-xl px-3.5 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <Mark mono={h.mono} hue={h.hue} size="sm" />
-                  <div>
-                    <p className="text-[12px] font-medium">{h.symbol}</p>
-                    <p className="text-[10px] num text-faint">{t.isLT ? 'long-term' : 'short-term'}</p>
+            {moves.map((m, i) => {
+              const color = m.tone === 'faint' ? 'var(--text-muted)' : `var(--${m.tone})`;
+              return (
+                <div key={i} className="surface-2 rounded-xl px-3.5 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[12px] font-medium leading-snug" style={{ color }}>{m.head}</p>
+                    {m.save ? <span className="num text-[10.5px] font-semibold whitespace-nowrap px-1.5 py-[2px] rounded-[5px]" style={{ background: 'var(--up-soft)', color: 'var(--up)' }}>saves {fmtINR(Math.round(m.save))}</span> : null}
+                  </div>
+                  <p className="text-[11px] text-faint leading-[1.6] mt-1">{m.body}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* long-term clock */}
+        <div className="surface rounded-2xl p-5">
+          <p className="font-medium text-[13px] tracking-tight">Long-term clock</p>
+          <p className="text-[11px] text-faint mt-0.5">Each holding's path to the 12.5% rate</p>
+          <div className="mt-5 space-y-4">
+            {rows.sort((a, b) => a.t.daysToLT - b.t.daysToLT).map(({ h, t }) => (
+              <div key={h.id}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-medium">{h.symbol}</span>
+                    {t.isLT ? <span className="text-[10px] num" style={{ color: 'var(--up)' }}>LT ✓</span>
+                            : <span className="text-[10px] num text-faint">LT on {ltDate(h)}</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!t.isLT && t.gain > 0 && (
+                      <span className="num text-[9.5px] px-1.5 py-[1px] rounded-[4px]" style={{ background: 'var(--warn-soft)', color: 'var(--warn)' }}>
+                        wait → save {fmtINR(Math.round(t.gain * (STCG_RATE - LTCG_RATE)))}
+                      </span>
+                    )}
+                    <span className="text-[10px] num text-faint">{Math.min(t.heldDays, 365)}/365</span>
                   </div>
                 </div>
-                <span className="text-[12.5px] num font-medium" style={{ color: 'var(--down)' }}>{fmtINR(Math.round(t.gain))}</span>
+                <div className="h-[3px] rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                  <div className="h-full rounded-full" style={{
+                    width: `${Math.min(100, (t.heldDays / 365) * 100)}%`,
+                    background: t.isLT ? 'var(--up)' : 'var(--accent)', opacity: 0.9,
+                  }}></div>
+                </div>
               </div>
             ))}
-            <p className="text-[11px] text-faint leading-[1.6] pt-1.5">
-              Booking these offsets {fmtINR(Math.round(Math.abs(losses)))} of taxable gains. Short-term losses can offset both ST and LT gains.
-            </p>
           </div>
-        ) : <p className="mt-4 text-[12px] text-muted">No unrealized losses — nothing to harvest.</p>}
+        </div>
+
+        {/* loss harvesting */}
+        <div className="surface rounded-2xl p-5">
+          <p className="font-medium text-[13px] tracking-tight">Loss harvesting</p>
+          <p className="text-[11px] text-faint mt-0.5">Losses you could book to offset gains</p>
+          {harvestables.length ? (
+            <div className="mt-4 space-y-2">
+              {harvestables.map(({ h, t }) => (
+                <div key={h.id} className="surface-2 rounded-xl px-3.5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <Mark mono={h.mono} hue={h.hue} size="sm" />
+                    <div>
+                      <p className="text-[12px] font-medium">{h.symbol}</p>
+                      <p className="text-[10px] num text-faint">{t.isLT ? 'long-term' : 'short-term'}{!t.isLT && ' · offsets any gain'}</p>
+                    </div>
+                  </div>
+                  <span className="text-[12.5px] num font-medium" style={{ color: 'var(--down)' }}>{fmtINR(Math.round(t.gain))}</span>
+                </div>
+              ))}
+              {harvestSaving > 0 && (
+                <div className="rounded-xl px-3.5 py-3 flex items-center justify-between" style={{ background: 'var(--up-soft)' }}>
+                  <span className="text-[11.5px] font-medium" style={{ color: 'var(--up)' }}>Potential tax saved this FY</span>
+                  <span className="text-[13px] num font-semibold" style={{ color: 'var(--up)' }}>{fmtINR(Math.round(harvestSaving))}</span>
+                </div>
+              )}
+              <p className="text-[11px] text-faint leading-[1.6] pt-1.5">
+                Short-term losses offset both ST and LT gains. Unused losses carry forward 8 years if you file on time.
+              </p>
+            </div>
+          ) : <p className="mt-4 text-[12px] text-muted">No unrealized losses — nothing to harvest.</p>}
+        </div>
       </div>
     </div>
   );
