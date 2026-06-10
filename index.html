@@ -934,7 +934,7 @@ function DiscoverView({ holdings }) {
   const maxAbs = Math.max(...SECTORS_FULL.map(s => Math.abs(s.chg)));
 
   return (
-    <div className="grid lg:grid-cols-10 gap-3 fade-up">
+    <div className="grid lg:grid-cols-10 gap-3 fade-up items-start">
       {/* 70% — exhaustive ranked sector accordion */}
       <div className="lg:col-span-7 surface rounded-2xl p-5">
         <div className="flex items-center justify-between mb-2">
@@ -1011,7 +1011,7 @@ function DiscoverView({ holdings }) {
           </div>
         </div>
 
-        <div className="surface rounded-2xl p-5 flex-1">
+        <div className="surface rounded-2xl p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-1 h-1 rounded-full pulse-dot" style={{ background: 'var(--accent)', color: 'var(--accent)' }}></span>
