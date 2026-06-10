@@ -227,6 +227,97 @@ const DISCOVER_IDEAS = [
     why: 'Same sector thesis as your Tata Motors, different exposure — SUVs plus the farm equipment cycle.' },
 ];
 
+/* exhaustive ranked sector universe — top scripts nest under each */
+const SECTORS_FULL = [
+  { name: 'Defence & Aerospace', chg: +14.2, note: 'Record order books on rising defence capex',
+    stocks: [
+      { symbol: 'HAL', name: 'Hindustan Aeronautics', chg: +18.4 },
+      { symbol: 'BEL', name: 'Bharat Electronics', chg: +15.1 },
+      { symbol: 'MAZDOCK', name: 'Mazagon Dock', chg: +12.6 },
+    ] },
+  { name: 'Capital Goods', chg: +9.7, note: 'Private capex cycle finally broadening',
+    stocks: [
+      { symbol: 'LT', name: 'Larsen & Toubro', chg: +11.2 },
+      { symbol: 'ABB', name: 'ABB India', chg: +9.8 },
+      { symbol: 'SIEMENS', name: 'Siemens India', chg: +7.4 },
+    ] },
+  { name: 'Auto & EV', chg: +6.8, holdsSector: 'Auto', note: 'EV adoption inflecting; rural demand back',
+    stocks: [
+      { symbol: 'TATAMOTORS', name: 'Tata Motors', chg: +9.1 },
+      { symbol: 'M&M', name: 'Mahindra & Mahindra', chg: +8.3 },
+      { symbol: 'BAJAJ-AUTO', name: 'Bajaj Auto', chg: +4.2 },
+    ] },
+  { name: 'PSU Banks', chg: +5.6, note: 'Credit growth strong, NPAs at decade lows',
+    stocks: [
+      { symbol: 'SBIN', name: 'State Bank of India', chg: +7.0 },
+      { symbol: 'BANKBARODA', name: 'Bank of Baroda', chg: +5.2 },
+      { symbol: 'CANBK', name: 'Canara Bank', chg: +4.1 },
+    ] },
+  { name: 'IT Services', chg: +4.1, holdsSector: 'IT Services', note: 'AI-led deals ramping; US spend recovering',
+    stocks: [
+      { symbol: 'TCS', name: 'Tata Consultancy', chg: +5.0 },
+      { symbol: 'INFY', name: 'Infosys', chg: +4.4 },
+      { symbol: 'LTIM', name: 'LTIMindtree', chg: +3.1 },
+    ] },
+  { name: 'Pharma & Healthcare', chg: +3.3, note: 'US generics pricing stabilising',
+    stocks: [
+      { symbol: 'SUNPHARMA', name: 'Sun Pharma', chg: +4.6 },
+      { symbol: 'DIVISLAB', name: "Divi's Labs", chg: +3.8 },
+      { symbol: 'MAXHEALTH', name: 'Max Healthcare', chg: +2.9 },
+    ] },
+  { name: 'Energy & Power', chg: +2.8, note: 'Peak demand records; renewables capex surge',
+    stocks: [
+      { symbol: 'NTPC', name: 'NTPC', chg: +4.0 },
+      { symbol: 'POWERGRID', name: 'Power Grid', chg: +2.5 },
+      { symbol: 'TATAPOWER', name: 'Tata Power', chg: +1.9 },
+    ] },
+  { name: 'FMCG', chg: +1.8, note: 'Volume recovery slow but margins improving',
+    stocks: [
+      { symbol: 'ITC', name: 'ITC', chg: +3.2 },
+      { symbol: 'HINDUNILVR', name: 'Hindustan Unilever', chg: +1.1 },
+      { symbol: 'NESTLEIND', name: 'Nestlé India', chg: +0.8 },
+    ] },
+  { name: 'Banking (Private)', chg: +1.2, holdsSector: 'Banking', note: 'NIM pressure persists; valuations reasonable',
+    stocks: [
+      { symbol: 'ICICIBANK', name: 'ICICI Bank', chg: +3.4 },
+      { symbol: 'HDFCBANK', name: 'HDFC Bank', chg: +0.6 },
+      { symbol: 'KOTAKBANK', name: 'Kotak Mahindra', chg: -0.4 },
+    ] },
+  { name: 'Realty', chg: +0.9, note: 'Premium housing strong; affordable lagging',
+    stocks: [
+      { symbol: 'DLF', name: 'DLF', chg: +2.1 },
+      { symbol: 'OBEROIRLTY', name: 'Oberoi Realty', chg: +0.7 },
+      { symbol: 'LODHA', name: 'Macrotech', chg: -0.3 },
+    ] },
+  { name: 'Metals & Mining', chg: -1.6, note: 'China demand soft; global prices capped',
+    stocks: [
+      { symbol: 'TATASTEEL', name: 'Tata Steel', chg: -0.8 },
+      { symbol: 'HINDALCO', name: 'Hindalco', chg: -1.9 },
+      { symbol: 'JSWSTEEL', name: 'JSW Steel', chg: -2.4 },
+    ] },
+  { name: 'Consumer Internet', chg: -3.4, holdsSector: 'Consumer Internet', note: 'Discount wars compressing margins',
+    stocks: [
+      { symbol: 'ETERNAL', name: 'Eternal (Zomato)', chg: -4.8 },
+      { symbol: 'NYKAA', name: 'Nykaa', chg: -2.9 },
+      { symbol: 'POLICYBZR', name: 'PB Fintech', chg: -1.7 },
+    ] },
+  { name: 'Fintech', chg: -5.2, holdsSector: 'Fintech', note: 'Regulatory overhang on UPI monetisation',
+    stocks: [
+      { symbol: 'PAYTM', name: 'One97 (Paytm)', chg: -6.3 },
+      { symbol: 'ANGELONE', name: 'Angel One', chg: -4.4 },
+      { symbol: 'CDSL', name: 'CDSL', chg: -2.1 },
+    ] },
+];
+
+/* upcoming catalysts worth a calendar entry */
+const RADAR = [
+  { label: 'Q1 FY27 earnings season opens', date: 'Jul 10', note: 'TCS kicks off — IT guidance season', type: 'earnings' },
+  { label: 'Tata Capital IPO', date: 'Jun 24', note: 'Largest NBFC listing this year', type: 'ipo' },
+  { label: 'RBI policy review', date: 'Aug 6', note: 'Rate-cut odds rising — banks & realty sensitive', type: 'macro' },
+  { label: 'Defence budget allocation', date: 'Jul', note: 'Order-book trigger for HAL, BEL', type: 'policy' },
+  { label: 'GST council meet', date: 'Jul 21', note: 'Possible EV component rate cut', type: 'policy' },
+];
+
 const SENTIMENT_META = {
   positive: { label: 'Positive', tone: 'up' },
   neutral:  { label: 'Neutral',  tone: 'warn' },
@@ -837,37 +928,110 @@ function TaxView({ holdings }) {
 
 /* ============================ DISCOVER VIEW ================================ */
 function DiscoverView({ holdings }) {
+  const [open, setOpen] = useState(null);
+  const heldSectors = new Set(holdings.map(h => h.sector));
+  const heldSymbols = new Set(holdings.map(h => h.symbol));
+  const maxAbs = Math.max(...SECTORS_FULL.map(s => Math.abs(s.chg)));
+
   return (
-    <div className="grid lg:grid-cols-5 gap-3 fade-up">
-      <div className="lg:col-span-2 surface rounded-2xl p-5">
-        <div className="flex items-center justify-between mb-3">
-          <p className="font-medium text-[13px] tracking-tight">Sector pulse</p>
-          <span className="text-[10px] num text-faint uppercase tracking-[0.08em]">3M · ● held</span>
+    <div className="grid lg:grid-cols-10 gap-3 fade-up">
+      {/* 70% — exhaustive ranked sector accordion */}
+      <div className="lg:col-span-7 surface rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-2">
+          <p className="font-medium text-[13px] tracking-tight">Sectors, ranked <span className="num text-faint font-normal">· {SECTORS_FULL.length}</span></p>
+          <span className="text-[10px] num text-faint uppercase tracking-[0.08em]">3M momentum · ● you hold · click to expand</span>
         </div>
-        <SectorList holdings={holdings} />
-      </div>
-      <div className="lg:col-span-3 surface rounded-2xl p-5">
-        <div className="flex items-center justify-between">
-          <p className="font-medium text-[13px] tracking-tight">Worth researching</p>
-          <span className="text-[10px] text-faint uppercase tracking-[0.08em]">starting points · not advice</span>
-        </div>
-        <p className="text-[11px] text-faint mt-0.5">Based on sector momentum and gaps in your current mix.</p>
-        <div className="mt-4 space-y-[2px]">
-          {DISCOVER_IDEAS.map((d, i) => (
-            <div key={i} className="flex items-start gap-3.5 px-3 py-3.5 rounded-xl hov cursor-default" style={i < DISCOVER_IDEAS.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
-              <Mark mono={d.mono} hue={d.hue} />
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-[13px] font-medium">{d.symbol}</p>
-                  <span className="text-[11px] text-faint">{d.name}</span>
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-[2px] rounded" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{d.sector}</span>
-                </div>
-                <p className="text-[12px] text-muted leading-[1.6] mt-1">{d.why}</p>
+        <div>
+          {SECTORS_FULL.map((s, i) => {
+            const up = s.chg >= 0;
+            const held = s.holdsSector && heldSectors.has(s.holdsSector);
+            const isOpen = open === i;
+            return (
+              <div key={i} style={i < SECTORS_FULL.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
+                <button onClick={() => setOpen(isOpen ? null : i)}
+                  className="w-full flex items-center gap-3 px-2.5 py-3 rounded-lg hov text-left">
+                  <span className="num text-[10px] text-faint w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="w-1 h-1 rounded-full shrink-0" style={{ background: held ? 'var(--accent)' : 'transparent' }}></span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-[12.5px] ${held ? 'font-medium' : 'text-muted'}`}>{s.name}</p>
+                    {isOpen && <p className="text-[10.5px] text-faint mt-0.5">{s.note}</p>}
+                  </div>
+                  <span className="num text-[11px] font-medium w-[52px] text-right shrink-0" style={{ color: up ? 'var(--up)' : 'var(--down)' }}>
+                    {up ? '+' : ''}{s.chg.toFixed(1)}%
+                  </span>
+                  <div className="w-[64px] h-[10px] hidden sm:flex items-center gap-[2px] justify-end shrink-0">
+                    {Array.from({ length: 8 }, (_, j) => {
+                      const filled = j < Math.round((Math.abs(s.chg) / maxAbs) * 8);
+                      return <span key={j} className="w-[4px] h-full rounded-[1px]" style={{ background: filled ? (up ? 'var(--up)' : 'var(--down)') : 'var(--border)', opacity: filled ? 0.85 : 1 }}></span>;
+                    })}
+                  </div>
+                  <svg width="12" height="12" viewBox="0 0 15 15" fill="none" className="text-faint shrink-0 transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'none' }}>
+                    <path d="M6 3l4.5 4.5L6 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                {isOpen && (
+                  <div className="pb-3 pl-[44px] pr-2 fade-up">
+                    {s.stocks.map((st, j) => {
+                      const inPortfolio = heldSymbols.has(st.symbol);
+                      return (
+                        <div key={j} className="flex items-center gap-3 py-2" style={j < s.stocks.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
+                          <p className="text-[12px] font-medium w-[110px] truncate">{st.symbol}</p>
+                          <p className="text-[11px] text-faint flex-1 truncate">{st.name}</p>
+                          {inPortfolio && <span className="text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-[2px] rounded" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>you hold</span>}
+                          <Delta value={st.chg} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-        <p className="text-[10.5px] text-faint mt-4 leading-[1.6]">Research starting points surfaced from market data — always do your own diligence.</p>
+      </div>
+
+      {/* 30% — research ideas + upcoming radar */}
+      <div className="lg:col-span-3 flex flex-col gap-3">
+        <div className="surface rounded-2xl p-5">
+          <div className="flex items-center justify-between">
+            <p className="font-medium text-[13px] tracking-tight">Worth researching</p>
+            <span className="text-[9.5px] text-faint uppercase tracking-[0.08em]">not advice</span>
+          </div>
+          <div className="mt-2">
+            {DISCOVER_IDEAS.map((d, i) => (
+              <div key={i} className="py-3" style={i < DISCOVER_IDEAS.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
+                <div className="flex items-center gap-2">
+                  <Mark mono={d.mono} hue={d.hue} size="sm" />
+                  <p className="text-[12px] font-medium">{d.symbol}</p>
+                  <span className="text-[10px] text-faint truncate">{d.sector}</span>
+                </div>
+                <p className="text-[11px] text-muted leading-[1.6] mt-1.5">{d.why}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="surface rounded-2xl p-5 flex-1">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full pulse-dot" style={{ background: 'var(--accent)', color: 'var(--accent)' }}></span>
+              <p className="font-medium text-[13px] tracking-tight">On the radar</p>
+            </div>
+            <span className="text-[9.5px] text-faint uppercase tracking-[0.08em]">upcoming</span>
+          </div>
+          <div className="mt-2">
+            {RADAR.map((r, i) => (
+              <div key={i} className="flex items-start gap-3 py-2.5" style={i < RADAR.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
+                <span className="num text-[10px] text-muted px-1.5 py-[3px] rounded-md surface-2 whitespace-nowrap mt-[1px] w-[46px] text-center shrink-0">{r.date}</span>
+                <div className="min-w-0">
+                  <p className="text-[11.5px] font-medium leading-snug">{r.label}</p>
+                  <p className="text-[10.5px] text-faint leading-[1.5] mt-0.5">{r.note}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-faint mt-3 leading-[1.6]">Catalysts that could move sectors you hold or watch.</p>
+        </div>
       </div>
     </div>
   );
