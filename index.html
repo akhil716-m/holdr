@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Holdr — Know what you hold</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  :root {
+    --bg: #FAFAFA;
+    --bg-soft: #F4F4F5;
+    --surface: #FFFFFF;
+    --surface-2: #F7F7F8;
+    --border: rgba(10,10,12,0.08);
+    --border-strong: rgba(10,10,12,0.16);
+    --text: #0A0A0C;
+    --text-muted: #62646C;
+    --text-faint: #9B9DA6;
+    --accent: #6E56CF;
+    --accent-2: #3E63DD;
+    --accent-soft: rgba(110,86,207,0.08);
+    --success: #18794E;
+    --success-soft: rgba(24,121,78,0.09);
+    --danger: #CD2B31;
+    --danger-soft: rgba(205,43,49,0.08);
+    --warning: #AD5700;
+    --warning-soft: rgba(173,87,0,0.09);
+    --ring: rgba(110,86,207,0.18);
+    --grid-line: rgba(10,10,12,0.035);
+    --glow-opacity: 0.07;
+  }
+  .dark {
+    --bg: #0A0A0B;
+    --bg-soft: #101012;
+    --surface: #131316;
+    --surface-2: #1A1A1E;
+    --border: rgba(255,255,255,0.065);
+    --border-strong: rgba(255,255,255,0.14);
+    --text: #F2F2F4;
+    --text-muted: #9C9DA8;
+    --text-faint: #5F606B;
+    --accent: #9B84F5;
+    --accent-2: #6E8BFB;
+    --accent-soft: rgba(155,132,245,0.12);
+    --success: #30D58C;
+    --success-soft: rgba(48,213,140,0.10);
+    --danger: #FF6369;
+    --danger-soft: rgba(255,99,105,0.10);
+    --warning: #F0B354;
+    --warning-soft: rgba(240,179,84,0.10);
+    --ring: rgba(155,132,245,0.25);
+    --grid-line: rgba(255,255,255,0.030);
+    --glow-opacity: 0.13;
+  }
+  * { -webkit-font-smoothing: antialiased; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    transition: background .25s ease, color .25s ease;
+  }
+  /* chart-paper grid backdrop — the trading-floor texture */
+  .chart-grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 30%, transparent 75%);
+  }
+  .glow {
+    position: fixed; z-index: 0; pointer-events: none; border-radius: 9999px;
+    filter: blur(130px); opacity: var(--glow-opacity);
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+  .surface { background: var(--surface); border: 1px solid var(--border); }
+  .surface-2 { background: var(--surface-2); border: 1px solid var(--border); }
+  .text-muted { color: var(--text-muted); }
+  .text-faint { color: var(--text-faint); }
+  .num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .ring-focus:focus { outline: none; box-shadow: 0 0 0 4px var(--ring); border-color: var(--accent); }
+  .lift { transition: transform .18s cubic-bezier(.2,.7,.3,1), border-color .18s ease, background .18s ease; }
+  .lift:hover { border-color: var(--border-strong); }
+
+  /* ticker tape */
+  .tape-mask { overflow: hidden; }
+  .tape { display: flex; gap: 0; width: max-content; animation: tape 38s linear infinite; }
+  .tape:hover { animation-play-state: paused; }
+  @keyframes tape { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+  /* market-open pulse */
+  .pulse-dot { position: relative; }
+  .pulse-dot::after {
+    content: ''; position: absolute; inset: -3px; border-radius: 9999px;
+    background: currentColor; opacity: .3; animation: pulse 2.2s ease-out infinite;
+  }
+  @keyframes pulse { 0% { transform: scale(1); opacity: .35; } 100% { transform: scale(2.4); opacity: 0; } }
+
+  .fade-up { animation: fadeUp .4s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* row accent rail on hover */
+  .row-rail { position: relative; }
+  .row-rail::before {
+    content: ''; position: absolute; left: 0; top: 18%; bottom: 18%; width: 2px;
+    background: var(--accent); border-radius: 2px; opacity: 0; transition: opacity .18s ease;
+  }
+  .row-rail:hover::before { opacity: 1; }
+
+  /* draw-in for chart line */
+  .draw-line { stroke-dasharray: 2400; stroke-dashoffset: 2400; animation: draw 1.4s cubic-bezier(.4,0,.2,1) forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .fade-in-slow { animation: fadeIn .9s ease .5s both; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* candle deco drift */
+  .candle-drift { animation: drift 7s ease-in-out infinite; }
+  @keyframes drift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useRef, useEffect } = React;
+
+/* ---------------------------------- DATA ---------------------------------- */
+
+const DEMO_HOLDINGS = [
+  {
+    id: 'tcs', symbol: 'TCS', name: 'Tata Consultancy Services', mono: 'TC', hue: '#9B84F5',
+    qty: 12, avgPrice: 3450, ltp: 3812, sector: 'IT Services',
+    sentiment: 'positive', sentimentScore: 78,
+    news: [
+      { tag: 'Earnings', text: 'Q1 net profit beats estimates, up 9% YoY', time: '2h ago' },
+      { tag: 'Deal', text: 'Wins $1.2B multi-year deal with European retailer', time: '1d ago' },
+    ],
+    events: [{ label: 'Q1 FY26 results', date: 'Jul 10', type: 'earnings' }],
+    action: 'hold',
+  },
+  {
+    id: 'hdfc', symbol: 'HDFCBANK', name: 'HDFC Bank', mono: 'HB', hue: '#6E8BFB',
+    qty: 30, avgPrice: 1540, ltp: 1487, sector: 'Banking',
+    sentiment: 'neutral', sentimentScore: 52,
+    news: [
+      { tag: 'Regulatory', text: 'RBI flags concerns over unsecured loan growth across banks', time: '5h ago' },
+      { tag: 'Management', text: 'CFO reaffirms FY26 NIM guidance at investor call', time: '2d ago' },
+    ],
+    events: [{ label: 'Ex-dividend date', date: 'Jun 18', type: 'dividend' }],
+    action: 'watch',
+  },
+  {
+    id: 'zomato', symbol: 'ETERNAL', name: 'Eternal (Zomato)', mono: 'ET', hue: '#FF6369',
+    qty: 150, avgPrice: 168, ltp: 142, sector: 'Consumer Internet',
+    sentiment: 'negative', sentimentScore: 31,
+    news: [
+      { tag: 'Sentiment', text: 'Brokerages cut target price citing rising delivery costs', time: '3h ago' },
+      { tag: 'Competition', text: 'Rival platform launches aggressive discount campaign in metros', time: '1d ago' },
+    ],
+    events: [{ label: 'Lock-in expiry', date: 'Jun 22', type: 'risk' }],
+    action: 'review',
+  },
+  {
+    id: 'infy', symbol: 'INFY', name: 'Infosys', mono: 'IN', hue: '#9B84F5',
+    qty: 20, avgPrice: 1390, ltp: 1542, sector: 'IT Services',
+    sentiment: 'positive', sentimentScore: 71,
+    news: [
+      { tag: 'Guidance', text: 'Raises FY26 revenue growth guidance to 4.5–5.5%', time: '6h ago' },
+      { tag: 'Hiring', text: 'Announces plans to hire 15,000 freshers this fiscal', time: '3d ago' },
+    ],
+    events: [{ label: 'Board meeting — buyback', date: 'Jun 28', type: 'corporate' }],
+    action: 'hold',
+  },
+  {
+    id: 'tatamotors', symbol: 'TATAMOTORS', name: 'Tata Motors', mono: 'TM', hue: '#30D58C',
+    qty: 45, avgPrice: 920, ltp: 1015, sector: 'Auto',
+    sentiment: 'positive', sentimentScore: 65,
+    news: [
+      { tag: 'Sales', text: 'EV sales cross 10,000 units/month for first time', time: '8h ago' },
+      { tag: 'Spin-off', text: 'Commercial vehicle demerger gets shareholder nod', time: '4d ago' },
+    ],
+    events: [{ label: 'Demerger record date', date: 'Jul 1', type: 'corporate' }],
+    action: 'hold',
+  },
+  {
+    id: 'paytm', symbol: 'PAYTM', name: 'One97 Communications', mono: 'PT', hue: '#F0B354',
+    qty: 60, avgPrice: 410, ltp: 365, sector: 'Fintech',
+    sentiment: 'negative', sentimentScore: 38,
+    news: [
+      { tag: 'Regulatory', text: 'NPCI extends deadline for UPI handle migration', time: '12h ago' },
+      { tag: 'Leadership', text: 'Senior product exec exits amid restructuring', time: '2d ago' },
+    ],
+    events: [{ label: 'AGM', date: 'Jul 15', type: 'corporate' }],
+    action: 'review',
+  },
+];
+
+const SEARCHABLE = [
+  { symbol: 'RELIANCE', name: 'Reliance Industries', mono: 'RE', hue: '#6E8BFB' },
+  { symbol: 'ICICIBANK', name: 'ICICI Bank', mono: 'IC', hue: '#F0B354' },
+  { symbol: 'BAJFINANCE', name: 'Bajaj Finance', mono: 'BF', hue: '#FF6369' },
+  { symbol: 'ADANIENT', name: 'Adani Enterprises', mono: 'AE', hue: '#30D58C' },
+  { symbol: 'ITC', name: 'ITC Limited', mono: 'IT', hue: '#9B84F5' },
+  { symbol: 'WIPRO', name: 'Wipro', mono: 'WI', hue: '#6E8BFB' },
+  { symbol: 'SUNPHARMA', name: 'Sun Pharma', mono: 'SP', hue: '#FF6369' },
+];
+
+const NEWS_FEED = [
+  { stockId: 'tcs', tag: 'Earnings', text: 'TCS Q1 net profit beats estimates, up 9% YoY on strong deal wins', time: '2h' },
+  { stockId: 'zomato', tag: 'Sentiment', text: 'Brokerages cut Eternal target price citing rising delivery costs', time: '3h' },
+  { stockId: null, tag: 'Markets', text: 'Nifty IT index gains 1.4% as US tech earnings season opens strong', time: '4h' },
+  { stockId: 'hdfc', tag: 'Regulatory', text: 'RBI flags concerns over unsecured loan growth across private banks', time: '5h' },
+  { stockId: 'infy', tag: 'Guidance', text: 'Infosys raises FY26 revenue growth guidance to 4.5–5.5%', time: '6h' },
+  { stockId: 'tatamotors', tag: 'Sales', text: 'Tata Motors EV sales cross 10,000 units/month for the first time', time: '8h' },
+  { stockId: 'paytm', tag: 'Regulatory', text: 'NPCI extends deadline for UPI third-party handle migration', time: '12h' },
+  { stockId: null, tag: 'Macro', text: 'RBI keeps repo rate unchanged at 6.5%, signals watchful stance', time: '1d' },
+];
+
+const SENTIMENT_META = {
+  positive: { label: 'Positive', var: 'success' },
+  neutral:  { label: 'Neutral',  var: 'warning' },
+  negative: { label: 'Cautious', var: 'danger' },
+};
+
+const ACTION_META = {
+  hold:   { label: 'Hold', long: 'Looking good — hold', var: 'success' },
+  watch:  { label: 'Watch', long: 'Worth watching', var: 'warning' },
+  review: { label: 'Review', long: 'Needs a review', var: 'danger' },
+};
+
+const fmtINR = n => '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+const fmtSigned = n => (n > 0 ? '+' : '') + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+
+/* ------------------------------ SEEDED RANDOM ------------------------------- */
+
+function seedFromString(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return Math.abs(h) || 1;
+}
+function seedRandom(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return function () { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+}
+function genTrend(seedStr, end, points = 22, biasUp = true) {
+  const rnd = seedRandom(seedFromString(seedStr));
+  let val = end * (biasUp ? (0.90 + rnd() * 0.05) : (1.05 + rnd() * 0.06));
+  const arr = [val];
+  for (let i = 1; i < points; i++) {
+    const pull = (end - val) / (points - i) * 0.55;
+    const noise = (rnd() - 0.5) * end * 0.022;
+    val = val + pull + noise;
+    arr.push(val);
+  }
+  arr[arr.length - 1] = end;
+  return arr;
+}
+
+/* --------------------------------- THEME ------------------------------------ */
+
+function useTheme() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('holdr-theme') || 'dark');
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('holdr-theme', theme);
+  }, [theme]);
+  return [theme, setTheme];
+}
+
+function ThemeToggle({ theme, setTheme }) {
+  const isDark = theme === 'dark';
+  return (
+    <button onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      className="w-9 h-9 rounded-lg surface flex items-center justify-center text-muted hover:text-current transition-colors lift"
+      aria-label="Toggle theme" title={isDark ? 'Switch to light' : 'Switch to dark'}>
+      {isDark ? (
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1v1.5M7.5 12.5V14M14 7.5h-1.5M2.5 7.5H1m11.1-4.6l-1 1m-7.2 7.2l-1 1m9.2 0l-1-1M4.4 3.9l-1-1" stroke="currentColor" strokeLinecap="round"/><circle cx="7.5" cy="7.5" r="3" stroke="currentColor"/></svg>
+      ) : (
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M13 9.5A6 6 0 0 1 5.5 2 6 6 0 1 0 13 9.5Z" stroke="currentColor" strokeLinejoin="round"/></svg>
+      )}
+    </button>
+  );
+}
+
+/* ------------------------------ PRIMITIVES ---------------------------------- */
+
+function Tone({ varName, children, dot, mono }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-[3px] rounded-md text-[11px] font-semibold ${mono ? 'num' : ''}`}
+      style={{ background: `var(--${varName}-soft)`, color: `var(--${varName})` }}>
+      {dot && <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: `var(--${varName})`, color: `var(--${varName})` }}></span>}
+      {children}
+    </span>
+  );
+}
+
+function Mark({ mono, hue, size = 'md' }) {
+  const dims = size === 'lg' ? 'w-11 h-11 text-[13px]' : size === 'sm' ? 'w-8 h-8 text-[10px]' : 'w-9 h-9 text-[11px]';
+  return (
+    <div className={`${dims} rounded-lg flex items-center justify-center font-semibold font-mono shrink-0`}
+      style={{ background: `${hue}14`, color: hue, border: `1px solid ${hue}2E` }}>
+      {mono}
+    </div>
+  );
+}
+
+/* abstract candlestick cluster — pure decoration, the "trading soul" of the brand */
+function CandleDeco({ width = 200, height = 120, seed = 'deco', className = '' }) {
+  const rnd = seedRandom(seedFromString(seed));
+  const candles = Array.from({ length: 12 }, (_, i) => {
+    const x = 8 + i * (width / 12);
+    const mid = height * (0.55 - (i / 12) * 0.28) + (rnd() - 0.5) * height * 0.18;
+    const body = 8 + rnd() * height * 0.22;
+    const wick = body + 10 + rnd() * 12;
+    const up = rnd() > 0.38;
+    return { x, mid, body, wick, up };
+  });
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className={className} fill="none">
+      {candles.map((c, i) => (
+        <g key={i} className="candle-drift" style={{ animationDelay: `${i * 0.25}s` }}>
+          <line x1={c.x} x2={c.x} y1={c.mid - c.wick / 2} y2={c.mid + c.wick / 2}
+            stroke={c.up ? 'var(--success)' : 'var(--danger)'} strokeWidth="1.4" opacity="0.5" />
+          <rect x={c.x - 3.5} y={c.mid - c.body / 2} width="7" height={c.body} rx="1.5"
+            fill={c.up ? 'var(--success)' : 'var(--danger)'} opacity={c.up ? 0.85 : 0.75} />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/* ------------------------------- TICKER TAPE -------------------------------- */
+
+function TickerTape({ holdings, trends }) {
+  const items = holdings.map(h => ({
+    symbol: h.symbol, ltp: h.ltp, change: trends[h.id]?.dayChange ?? 0,
+  }));
+  const strip = [...items, ...items]; // duplicated for seamless loop
+  return (
+    <div className="tape-mask relative z-20" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-soft)' }}>
+      <div className="tape py-2">
+        {strip.map((it, i) => (
+          <div key={i} className="flex items-center gap-2 px-5 whitespace-nowrap" style={{ borderRight: '1px solid var(--border)' }}>
+            <span className="text-[11px] font-semibold tracking-wide text-muted">{it.symbol}</span>
+            <span className="text-[11px] num">{fmtINR(it.ltp)}</span>
+            <span className="text-[11px] num font-medium" style={{ color: it.change >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+              {it.change >= 0 ? '▲' : '▼'}{Math.abs(it.change).toFixed(2)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------------- CHARTS ----------------------------------- */
+
+function Sparkline({ data, positive, id, width = 110, height = 32 }) {
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = (max - min) || 1;
+  const stepX = width / (data.length - 1);
+  const pts = data.map((d, i) => [i * stepX, height - ((d - min) / range) * (height - 4) - 2]);
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const area = `${line} L ${width},${height} L 0,${height} Z`;
+  const color = positive ? 'var(--success)' : 'var(--danger)';
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible shrink-0">
+      <defs>
+        <linearGradient id={`spark-${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#spark-${id})`} stroke="none" />
+      <path d={line} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TrendChart({ data, positive, invested, height = 210 }) {
+  const width = 780;
+  const min = Math.min(...data, invested), max = Math.max(...data, invested);
+  const range = (max - min) || 1;
+  const stepX = width / (data.length - 1);
+  const pad = 14;
+  const h = height - pad * 2;
+  const y = v => pad + (h - ((v - min) / range) * h);
+  const pts = data.map((d, i) => [i * stepX, y(d)]);
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const area = `${line} L ${width},${height} L 0,${height} Z`;
+  const color = positive ? 'var(--success)' : 'var(--danger)';
+  const last = pts[pts.length - 1];
+  const investedY = y(invested);
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height }}>
+      <defs>
+        <linearGradient id="trend-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.16" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {[0.25, 0.5, 0.75].map((f, i) => (
+        <line key={i} x1="0" x2={width} y1={height * f} y2={height * f} stroke="var(--border)" strokeWidth="1" />
+      ))}
+      {/* invested baseline — the line you're trying to stay above */}
+      <line x1="0" x2={width} y1={investedY} y2={investedY} stroke="var(--text-faint)" strokeWidth="1" strokeDasharray="4 5" opacity="0.6" />
+      <text x={width - 6} y={investedY - 6} textAnchor="end" fontSize="10" fill="var(--text-faint)" fontFamily="JetBrains Mono, monospace">invested</text>
+      <path d={area} fill="url(#trend-grad)" stroke="none" className="fade-in-slow" />
+      <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="draw-line" />
+      <circle cx={last[0]} cy={last[1]} r="4" fill={color} stroke="var(--surface)" strokeWidth="2.5" />
+      <circle cx={last[0]} cy={last[1]} r="9" fill={color} opacity="0.15" />
+    </svg>
+  );
+}
+
+/* sentiment meter — abstract "gauge" of your portfolio mood */
+function SentimentMeter({ score }) {
+  const angle = -90 + (score / 100) * 180;
+  const tone = score >= 60 ? 'success' : score >= 45 ? 'warning' : 'danger';
+  return (
+    <div className="relative w-[88px] h-[52px] shrink-0">
+      <svg viewBox="0 0 88 52" className="w-full h-full">
+        <path d="M 8 48 A 36 36 0 0 1 80 48" fill="none" stroke="var(--border-strong)" strokeWidth="5" strokeLinecap="round" />
+        <path d="M 8 48 A 36 36 0 0 1 80 48" fill="none" stroke={`var(--${tone})`} strokeWidth="5" strokeLinecap="round"
+          strokeDasharray={`${(score / 100) * 113} 113`} />
+        <g transform={`rotate(${angle} 44 48)`}>
+          <line x1="44" y1="48" x2="44" y2="22" stroke="var(--text)" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="44" cy="48" r="3.5" fill="var(--text)" />
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+/* --------------------------------- NEWS FEED -------------------------------- */
+
+function NewsRow({ item, holding }) {
+  return (
+    <div className="flex items-start gap-3 py-3 row-rail pl-3 -ml-3" style={{ borderBottom: '1px solid var(--border)' }}>
+      {holding ? <Mark mono={holding.mono} hue={holding.hue} size="sm" /> : (
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[9px] font-mono font-semibold shrink-0 surface-2 text-faint">MKT</div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded"
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{item.tag}</span>
+          {holding && <span className="text-[10px] font-mono font-medium text-faint">{holding.symbol}</span>}
+          <span className="text-[10px] num text-faint ml-auto whitespace-nowrap">{item.time}</span>
+        </div>
+        <p className="text-[13px] leading-snug mt-1.5">{item.text}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ HOLDING ROW --------------------------------- */
+
+function HoldingRow({ h, onOpen, trend, weight }) {
+  const invested = h.qty * h.avgPrice;
+  const current = h.qty * h.ltp;
+  const pnl = current - invested;
+  const pnlPct = (pnl / invested) * 100;
+  const positive = pnl >= 0;
+  const dayChange = h._dayChange;
+  const dayPositive = dayChange >= 0;
+  const action = ACTION_META[h.action];
+  const sentiment = SENTIMENT_META[h.sentiment];
+
+  return (
+    <button onClick={() => onOpen(h)}
+      className="group w-full flex items-center gap-4 px-4 sm:px-5 py-4 text-left transition-colors lift row-rail"
+      style={{ borderBottom: '1px solid var(--border)' }}>
+      {/* identity + allocation depth bar */}
+      <div className="flex items-center gap-3 min-w-0 w-[42%] sm:w-[26%]">
+        <Mark mono={h.mono} hue={h.hue} />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-[13px] tracking-tight truncate">{h.symbol}</p>
+          <p className="text-[11px] text-faint truncate num">{h.qty} × {fmtINR(h.avgPrice)}</p>
+          <div className="mt-1.5 h-[3px] rounded-full overflow-hidden hidden sm:block" style={{ background: 'var(--border)' }}>
+            <div className="h-full rounded-full" style={{ width: `${Math.max(weight, 4)}%`, background: h.hue, opacity: 0.8 }}></div>
+          </div>
+        </div>
+      </div>
+
+      {/* sparkline */}
+      <div className="hidden md:flex items-center w-[15%]">
+        <Sparkline data={trend} positive={positive} id={h.id} width={104} height={30} />
+      </div>
+
+      {/* LTP + day change */}
+      <div className="hidden sm:block w-[16%]">
+        <p className="text-[13px] num font-medium">{fmtINR(h.ltp)}</p>
+        <p className="text-[11px] num font-medium mt-0.5" style={{ color: dayPositive ? 'var(--success)' : 'var(--danger)' }}>
+          {dayPositive ? '▲' : '▼'} {Math.abs(dayChange).toFixed(2)}%
+        </p>
+      </div>
+
+      {/* current value */}
+      <div className="hidden lg:block w-[14%]">
+        <p className="text-[10px] uppercase tracking-[0.08em] text-faint font-semibold">Value</p>
+        <p className="text-[13px] num font-medium mt-0.5">{fmtINR(Math.round(current))}</p>
+      </div>
+
+      {/* P&L */}
+      <div className="flex-1 sm:flex-none sm:w-[16%] text-right sm:text-left">
+        <p className="text-[10px] uppercase tracking-[0.08em] text-faint font-semibold hidden sm:block">P&amp;L</p>
+        <p className="text-[13px] num font-semibold mt-0 sm:mt-0.5" style={{ color: positive ? 'var(--success)' : 'var(--danger)' }}>
+          {fmtSigned(Math.round(pnl))}
+        </p>
+        <p className="text-[11px] num font-medium opacity-70" style={{ color: positive ? 'var(--success)' : 'var(--danger)' }}>
+          {fmtSigned(pnlPct.toFixed(1))}%
+        </p>
+      </div>
+
+      {/* sentiment + action */}
+      <div className="hidden xl:flex flex-col items-end gap-1.5 w-[15%]">
+        <Tone varName={sentiment.var} dot>{sentiment.label}</Tone>
+        <Tone varName={action.var} mono>{action.label}</Tone>
+      </div>
+
+      <svg width="14" height="14" viewBox="0 0 15 15" fill="none" className="text-faint group-hover:translate-x-0.5 transition-transform shrink-0">
+        <path d="M6 3l4.5 4.5L6 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
+  );
+}
+
+/* ------------------------------ DETAIL MODAL -------------------------------- */
+
+function HoldingDetail({ h, onClose, trend }) {
+  const invested = h.qty * h.avgPrice;
+  const current = h.qty * h.ltp;
+  const pnl = current - invested;
+  const pnlPct = (pnl / invested) * 100;
+  const positive = pnl >= 0;
+  const action = ACTION_META[h.action];
+  const sentiment = SENTIMENT_META[h.sentiment];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center backdrop-blur-sm" style={{ background: 'rgba(5,5,8,0.55)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()}
+        className="w-full sm:max-w-xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl fade-up"
+        style={{ background: 'var(--bg-soft)', border: '1px solid var(--border)' }}>
+
+        {/* header strip */}
+        <div className="px-6 sm:px-7 pt-6 pb-5" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <Mark mono={h.mono} hue={h.hue} size="lg" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-base tracking-tight">{h.symbol}</h3>
+                  <Tone varName={sentiment.var} dot>{sentiment.label} · {h.sentimentScore}</Tone>
+                </div>
+                <p className="text-[12px] text-muted mt-0.5">{h.name} · {h.sector}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg surface flex items-center justify-center text-muted hover:text-current transition-colors">
+              <svg width="12" height="12" viewBox="0 0 15 15" fill="none"><path d="M3 3l9 9M12 3l-9 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+
+          <div className="flex items-baseline gap-3 mt-5">
+            <p className="text-[28px] num font-semibold tracking-tight">{fmtINR(h.ltp)}</p>
+            <p className="text-sm num font-semibold" style={{ color: positive ? 'var(--success)' : 'var(--danger)' }}>
+              {fmtSigned(Math.round(pnl))} ({fmtSigned(pnlPct.toFixed(1))}%)
+            </p>
+          </div>
+          <div className="mt-3 -mx-1">
+            <Sparkline data={trend} positive={positive} id={`detail-${h.id}`} width={520} height={56} />
+          </div>
+        </div>
+
+        <div className="px-6 sm:px-7 py-5">
+          {/* position stats */}
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="surface rounded-xl p-3">
+              <p className="text-[9px] text-faint font-semibold uppercase tracking-[0.08em]">Position</p>
+              <p className="font-medium num mt-1 text-[13px]">{h.qty} shares</p>
+            </div>
+            <div className="surface rounded-xl p-3">
+              <p className="text-[9px] text-faint font-semibold uppercase tracking-[0.08em]">Avg cost</p>
+              <p className="font-medium num mt-1 text-[13px]">{fmtINR(h.avgPrice)}</p>
+            </div>
+            <div className="surface rounded-xl p-3">
+              <p className="text-[9px] text-faint font-semibold uppercase tracking-[0.08em]">Value</p>
+              <p className="font-medium num mt-1 text-[13px]">{fmtINR(Math.round(current))}</p>
+            </div>
+          </div>
+
+          {/* verdict strip */}
+          <div className="mt-4 rounded-xl p-4 flex items-center gap-3" style={{ background: `var(--${action.var}-soft)`, border: `1px solid var(--${action.var})20` }}>
+            <span className="w-2 h-2 rounded-full pulse-dot shrink-0" style={{ background: `var(--${action.var})`, color: `var(--${action.var})` }}></span>
+            <div>
+              <p className="font-semibold text-[13px]" style={{ color: `var(--${action.var})` }}>{action.long}</p>
+              <p className="text-[11px] text-muted mt-0.5">Based on recent news flow, sentiment trend, and upcoming events.</p>
+            </div>
+          </div>
+
+          {/* news */}
+          <div className="mt-5">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold mb-2">What's moving it</p>
+            <div className="space-y-2">
+              {h.news.map((n, i) => (
+                <div key={i} className="surface rounded-xl p-3 flex items-start gap-3">
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded whitespace-nowrap mt-0.5"
+                    style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{n.tag}</span>
+                  <div>
+                    <p className="text-[13px] leading-snug">{n.text}</p>
+                    <p className="text-[10px] num text-faint mt-1">{n.time}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* events */}
+          <div className="mt-5 pb-1">
+            <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold mb-2">On the horizon</p>
+            <div className="flex flex-wrap gap-2">
+              {h.events.map((e, i) => {
+                const tone = { earnings: 'accent', dividend: 'accent', corporate: 'warning', risk: 'danger' }[e.type] || 'accent';
+                const style = tone === 'accent'
+                  ? { background: 'var(--accent-soft)', color: 'var(--accent)' }
+                  : { background: `var(--${tone}-soft)`, color: `var(--${tone})` };
+                return (
+                  <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium" style={style}>
+                    <svg width="11" height="11" viewBox="0 0 15 15" fill="none"><rect x="2" y="3" width="11" height="10" rx="1.5" stroke="currentColor"/><path d="M2 6h11M5 1.5V4M10 1.5V4" stroke="currentColor" strokeLinecap="round"/></svg>
+                    {e.label} · <span className="num">{e.date}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------- ADD MODAL ---------------------------------- */
+
+function AddHoldingModal({ onClose, onAdd }) {
+  const [mode, setMode] = useState('search');
+  const [query, setQuery] = useState('');
+  const [picked, setPicked] = useState(null);
+  const [qty, setQty] = useState('');
+  const [price, setPrice] = useState('');
+  const [fileName, setFileName] = useState(null);
+  const fileRef = useRef(null);
+
+  const results = query.trim()
+    ? SEARCHABLE.filter(s => (s.symbol + s.name).toLowerCase().includes(query.toLowerCase()))
+    : SEARCHABLE;
+
+  const handleFile = e => {
+    const f = e.target.files[0];
+    if (f) setFileName(f.name);
+  };
+
+  const submitManual = () => {
+    if (!picked || !qty || !price) return;
+    onAdd({
+      id: picked.symbol.toLowerCase(),
+      symbol: picked.symbol, name: picked.name, mono: picked.mono, hue: picked.hue,
+      qty: Number(qty), avgPrice: Number(price), ltp: Math.round(Number(price) * (1 + (Math.random() * 0.2 - 0.1))),
+      sector: 'Diversified', sentiment: 'neutral', sentimentScore: 50 + Math.round(Math.random() * 20 - 10),
+      news: [{ tag: 'Update', text: `Tracking ${picked.symbol} — fresh news will appear here as it breaks.`, time: 'just now' }],
+      events: [{ label: 'Next earnings window', date: 'TBA', type: 'earnings' }],
+      action: 'watch',
+    });
+    onClose();
+  };
+
+  const submitUpload = () => {
+    onAdd('demo-batch');
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center backdrop-blur-sm" style={{ background: 'rgba(5,5,8,0.55)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-6 sm:p-7 shadow-2xl max-h-[90vh] overflow-y-auto fade-up"
+        style={{ background: 'var(--bg-soft)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-base tracking-tight">Add to your holdings</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg surface flex items-center justify-center text-muted hover:text-current transition-colors">
+            <svg width="12" height="12" viewBox="0 0 15 15" fill="none"><path d="M3 3l9 9M12 3l-9 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        <div className="mt-5 flex surface-2 rounded-lg p-1">
+          {[['search', 'Search & add'], ['upload', 'Upload P&L / CSV']].map(([key, label]) => (
+            <button key={key} onClick={() => setMode(key)}
+              className="flex-1 text-[13px] font-medium py-2 rounded-md transition-colors"
+              style={mode === key ? { background: 'var(--surface)', color: 'var(--text)', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' } : { color: 'var(--text-muted)' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'search' && (
+          <div className="mt-5 space-y-4">
+            <div>
+              <input value={query} onChange={e => { setQuery(e.target.value); setPicked(null); }}
+                placeholder="Search a stock — e.g. RELIANCE, ICICI..."
+                className="w-full px-3.5 py-2.5 rounded-lg text-[13px] outline-none ring-focus transition-all"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+              <div className="mt-2 max-h-44 overflow-y-auto space-y-1 pr-1">
+                {results.map(s => (
+                  <button key={s.symbol} onClick={() => { setPicked(s); setQuery(s.symbol); }}
+                    className="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors"
+                    style={picked?.symbol === s.symbol
+                      ? { border: '1px solid var(--accent)', background: 'var(--accent-soft)' }
+                      : { border: '1px solid var(--border)', background: 'var(--surface)' }}>
+                    <Mark mono={s.mono} hue={s.hue} size="sm" />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-semibold truncate">{s.symbol}</span>
+                      <span className="block text-[11px] text-faint truncate">{s.name}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {picked && (
+              <div className="grid grid-cols-2 gap-2.5">
+                <input value={qty} onChange={e => setQty(e.target.value.replace(/[^0-9]/g, ''))} type="text" placeholder="Quantity"
+                  className="px-3.5 py-2.5 rounded-lg text-[13px] num outline-none ring-focus" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+                <input value={price} onChange={e => setPrice(e.target.value.replace(/[^0-9.]/g, ''))} type="text" placeholder="Avg. buy price"
+                  className="px-3.5 py-2.5 rounded-lg text-[13px] num outline-none ring-focus" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+              </div>
+            )}
+            <button onClick={submitManual} disabled={!picked || !qty || !price}
+              className="w-full py-3 rounded-lg font-semibold text-[13px] transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{ background: 'var(--text)', color: 'var(--bg)' }}>
+              Add to portfolio
+            </button>
+          </div>
+        )}
+
+        {mode === 'upload' && (
+          <div className="mt-5 space-y-4">
+            <div onClick={() => fileRef.current.click()}
+              className="rounded-xl p-8 text-center cursor-pointer transition-colors"
+              style={{ border: '1.5px dashed var(--border-strong)', background: 'var(--surface-2)' }}>
+              <p className="text-[13px] font-medium">{fileName || 'Drop your P&L statement or holdings CSV'}</p>
+              <p className="text-[11px] text-faint mt-1.5">Supports CSV, XLSX from Zerodha, Groww, Upstox & more</p>
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.pdf" className="hidden" onChange={handleFile} />
+            </div>
+            <button onClick={submitUpload} disabled={!fileName}
+              className="w-full py-3 rounded-lg font-semibold text-[13px] transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{ background: 'var(--text)', color: 'var(--bg)' }}>
+              Parse & import holdings
+            </button>
+            <p className="text-[11px] text-center text-faint">Prototype — uploading loads a sample portfolio so you can see how it works.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------- APP ------------------------------------- */
+
+function App() {
+  const [theme, setTheme] = useTheme();
+  const [holdings, setHoldings] = useState(DEMO_HOLDINGS);
+  const [active, setActive] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [filter, setFilter] = useState('all');
+  const [toast, setToast] = useState(null);
+  const [period, setPeriod] = useState('1M');
+
+  const flash = msg => { setToast(msg); setTimeout(() => setToast(null), 2600); };
+
+  const handleAdd = entry => {
+    if (entry === 'demo-batch') {
+      const fresh = DEMO_HOLDINGS.filter(h => !holdings.some(x => x.id === h.id));
+      if (fresh.length === 0) { flash('Sample portfolio is already loaded'); return; }
+      setHoldings(prev => [...prev, ...fresh]);
+      flash(`Imported ${fresh.length} holdings from your file`);
+    } else {
+      setHoldings(prev => [entry, ...prev.filter(h => h.id !== entry.id)]);
+      flash(`${entry.symbol} added to your portfolio`);
+    }
+  };
+
+  const totals = useMemo(() => {
+    const invested = holdings.reduce((a, h) => a + h.qty * h.avgPrice, 0);
+    const current = holdings.reduce((a, h) => a + h.qty * h.ltp, 0);
+    const pnl = current - invested;
+    const needsReview = holdings.filter(h => h.action === 'review').length;
+    const avgSentiment = Math.round(holdings.reduce((a, h) => a + h.sentimentScore, 0) / (holdings.length || 1));
+    return { invested, current, pnl, pnlPct: (pnl / invested) * 100, needsReview, avgSentiment };
+  }, [holdings]);
+
+  const trends = useMemo(() => {
+    const map = {};
+    holdings.forEach(h => {
+      const positive = h.ltp >= h.avgPrice;
+      map[h.id] = {
+        series: genTrend(h.id + period, h.ltp, 22, positive),
+        dayChange: ((seedRandom(seedFromString(h.id + 'day'))() * 5 - 2.5) + (h.sentiment === 'positive' ? 0.6 : h.sentiment === 'negative' ? -0.6 : 0)),
+      };
+    });
+    return map;
+  }, [holdings, period]);
+
+  const portfolioTrend = useMemo(
+    () => genTrend('portfolio-' + period + holdings.length, totals.current, 30, totals.pnl >= 0),
+    [totals.current, totals.pnl, holdings.length, period]
+  );
+
+  const filtered = holdings.filter(h => filter === 'all' ? true : h.action === filter);
+
+  const filters = [
+    ['all', 'All'],
+    ['hold', 'Looking good'],
+    ['watch', 'Worth watching'],
+    ['review', 'Needs review'],
+  ];
+  const periods = ['1W', '1M', '3M', '1Y'];
+
+  return (
+    <div className="min-h-screen pb-16 relative">
+      {/* backdrop: chart-paper grid + soft glows */}
+      <div className="chart-grid"></div>
+      <div className="glow" style={{ width: 480, height: 480, top: -200, left: '12%', background: 'var(--accent)' }}></div>
+      <div className="glow" style={{ width: 420, height: 420, top: -160, right: '8%', background: 'var(--accent-2)' }}></div>
+
+      {/* Header */}
+      <header className="sticky top-0 z-40 backdrop-blur-md" style={{ borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--bg) 78%, transparent)' }}>
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            {/* logo: abstract candle bars */}
+            <div className="w-8 h-8 rounded-lg surface flex items-end justify-center gap-[3px] pb-[7px]">
+              <span className="w-[3px] h-[8px] rounded-full" style={{ background: 'var(--danger)' }}></span>
+              <span className="w-[3px] h-[14px] rounded-full" style={{ background: 'var(--accent)' }}></span>
+              <span className="w-[3px] h-[11px] rounded-full" style={{ background: 'var(--success)' }}></span>
+            </div>
+            <div>
+              <p className="font-semibold leading-none tracking-tight text-[15px]">Holdr</p>
+              <p className="text-[10px] text-faint leading-none mt-1 tracking-wide">KNOW WHAT YOU HOLD</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* market status */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg surface">
+              <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: 'var(--success)', color: 'var(--success)' }}></span>
+              <span className="text-[11px] font-medium text-muted">Market open</span>
+              <span className="text-[11px] num text-faint">NSE · 13:42 IST</span>
+            </div>
+            <ThemeToggle theme={theme} setTheme={setTheme} />
+            <button onClick={() => setShowAdd(true)}
+              className="px-3.5 sm:px-4 py-2 rounded-lg text-[13px] font-semibold transition-opacity hover:opacity-90 flex items-center gap-1.5"
+              style={{ background: 'var(--text)', color: 'var(--bg)' }}>
+              <span className="text-sm leading-none">+</span> <span className="hidden sm:inline">Add holding</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Ticker tape */}
+      <TickerTape holdings={holdings} trends={trends} />
+
+      <main className="max-w-7xl mx-auto px-5 sm:px-8 relative z-10">
+
+        {/* Hero strip: headline + candle deco */}
+        <section className="mt-9 flex items-end justify-between gap-6">
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.14em] uppercase" style={{ color: 'var(--accent)' }}>Portfolio · {holdings.length} positions</p>
+            <h1 className="text-[26px] sm:text-[32px] font-semibold leading-[1.15] tracking-tight mt-2">
+              Markets move daily.<br/>
+              <span className="text-muted">Here's what moved <em className="not-italic" style={{ color: 'var(--text)' }}>yours</em>.</span>
+            </h1>
+          </div>
+          <CandleDeco width={210} height={110} seed="hero" className="hidden md:block opacity-80 shrink-0" />
+        </section>
+
+        {/* Trend + News */}
+        <section className="mt-7 grid lg:grid-cols-3 gap-4 items-stretch">
+          {/* Trend chart card */}
+          <div className="lg:col-span-2 surface rounded-2xl flex flex-col overflow-hidden">
+            <div className="flex items-start justify-between gap-4 flex-wrap p-5 sm:p-6 pb-0">
+              <div>
+                <p className="text-[10px] font-semibold text-faint uppercase tracking-[0.1em]">Current value</p>
+                <div className="flex items-baseline gap-2.5 mt-1.5 flex-wrap">
+                  <p className="text-[30px] sm:text-[34px] num font-semibold tracking-tight leading-none">{fmtINR(Math.round(totals.current))}</p>
+                  <Tone varName={totals.pnl >= 0 ? 'success' : 'danger'} mono>
+                    {totals.pnl >= 0 ? '▲' : '▼'} {fmtSigned(Math.round(totals.pnlPct))}%
+                  </Tone>
+                </div>
+                <p className="text-[11px] num text-faint mt-2">
+                  invested {fmtINR(Math.round(totals.invested))} · {totals.pnl >= 0 ? 'up' : 'down'} {fmtINR(Math.abs(Math.round(totals.pnl)))} all-time
+                </p>
+              </div>
+              <div className="flex surface-2 rounded-lg p-0.5">
+                {periods.map(p => (
+                  <button key={p} onClick={() => setPeriod(p)}
+                    className="px-3 py-1.5 rounded-md text-[11px] num font-semibold transition-colors"
+                    style={period === p ? { background: 'var(--surface)', color: 'var(--text)', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' } : { color: 'var(--text-faint)' }}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 flex-1">
+              <TrendChart key={period} data={portfolioTrend} positive={totals.pnl >= 0} invested={totals.invested} height={216} />
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 px-5 sm:px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-3">
+                <SentimentMeter score={totals.avgSentiment} />
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.08em] text-faint font-semibold">Mood</p>
+                  <p className="text-[13px] num font-semibold mt-0.5">{totals.avgSentiment}/100</p>
+                </div>
+              </div>
+              <div className="flex flex-col justify-center">
+                <p className="text-[10px] uppercase tracking-[0.08em] text-faint font-semibold">Sectors</p>
+                <p className="text-[13px] font-semibold mt-0.5">{new Set(holdings.map(h => h.sector)).size} sectors</p>
+                <p className="text-[11px] text-faint mt-0.5">{holdings.length} positions</p>
+              </div>
+              <div className="flex flex-col justify-center">
+                <p className="text-[10px] uppercase tracking-[0.08em] text-faint font-semibold">Attention</p>
+                <p className="text-[13px] font-semibold mt-0.5" style={{ color: totals.needsReview ? 'var(--danger)' : 'var(--success)' }}>
+                  {totals.needsReview ? `${totals.needsReview} flagged` : 'All clear'}
+                </p>
+                <p className="text-[11px] text-faint mt-0.5">{totals.needsReview ? 'needs review' : "you're caught up"}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* News feed */}
+          <div className="surface rounded-2xl p-5 sm:p-6 flex flex-col min-h-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: 'var(--accent)', color: 'var(--accent)' }}></span>
+                <p className="font-semibold text-[13px] tracking-tight">Signal feed</p>
+              </div>
+              <span className="text-[10px] num text-faint uppercase tracking-[0.08em]">Live · your holdings</span>
+            </div>
+            <div className="mt-1 flex-1 overflow-y-auto max-h-[440px] pr-1">
+              {NEWS_FEED.map((item, i) => (
+                <NewsRow key={i} item={item} holding={holdings.find(h => h.id === item.stockId) || null} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Filters */}
+        <section className="mt-9 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {filters.map(([key, label]) => (
+              <button key={key} onClick={() => setFilter(key)}
+                className="whitespace-nowrap px-3.5 py-2 rounded-lg text-[12px] font-medium transition-colors flex items-center gap-1.5"
+                style={filter === key
+                  ? { background: 'var(--text)', color: 'var(--bg)' }
+                  : { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                {label}
+                {key !== 'all' && (
+                  <span className="text-[10px] num px-1.5 rounded-full"
+                    style={filter === key ? { background: 'rgba(127,127,127,0.25)' } : { background: 'var(--surface-2)' }}>
+                    {holdings.filter(h => h.action === key).length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          <p className="hidden sm:block text-[11px] num text-faint">{filtered.length} of {holdings.length} positions</p>
+        </section>
+
+        {/* Holdings list */}
+        <section className="mt-3 surface rounded-2xl overflow-hidden">
+          <div className="hidden sm:flex items-center gap-4 px-5 py-2.5 text-[9px] uppercase tracking-[0.1em] text-faint font-semibold" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+            <div className="w-[42%] sm:w-[26%]">Position</div>
+            <div className="hidden md:block w-[15%]">Trend</div>
+            <div className="hidden sm:block w-[16%]">LTP / Day</div>
+            <div className="hidden lg:block w-[14%]">Value</div>
+            <div className="flex-1 sm:flex-none sm:w-[16%]">P&amp;L</div>
+            <div className="hidden xl:block w-[15%] text-right">Signal</div>
+            <div className="w-3.5"></div>
+          </div>
+          {filtered.map(h => {
+            const weight = (h.qty * h.ltp / totals.current) * 100;
+            return <HoldingRow key={h.id} h={{ ...h, _dayChange: trends[h.id].dayChange }} trend={trends[h.id].series} weight={weight} onOpen={setActive} />;
+          })}
+          {filtered.length === 0 && (
+            <div className="text-center py-16 text-faint">
+              <p className="font-medium text-[13px]">Nothing in this view — try another filter.</p>
+            </div>
+          )}
+        </section>
+
+        {/* Add nudge */}
+        <section className="mt-5 mb-2">
+          <button onClick={() => setShowAdd(true)}
+            className="w-full rounded-2xl p-5 text-center transition-colors group lift"
+            style={{ border: '1.5px dashed var(--border-strong)', background: 'transparent' }}>
+            <p className="font-semibold text-[13px]">+ Add another position</p>
+            <p className="text-[11px] text-faint mt-1">Search & add manually, or upload your broker's P&L / holdings statement</p>
+          </button>
+        </section>
+      </main>
+
+      {active && <HoldingDetail h={active} trend={trends[active.id]?.series || genTrend(active.id, active.ltp)} onClose={() => setActive(null)} />}
+      {showAdd && <AddHoldingModal onClose={() => setShowAdd(false)} onAdd={handleAdd} />}
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] text-[13px] font-medium px-4 py-2.5 rounded-lg shadow-2xl fade-up"
+          style={{ background: 'var(--text)', color: 'var(--bg)' }}>
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
