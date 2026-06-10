@@ -619,93 +619,108 @@ function TaxView({ holdings }) {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-3">
-        {/* smart moves — the actions */}
-        <div className="surface rounded-2xl p-5">
-          <div className="flex items-center gap-2">
-            <span className="w-1 h-1 rounded-full pulse-dot" style={{ background: 'var(--accent)', color: 'var(--accent)' }}></span>
+      <div className="grid lg:grid-cols-5 gap-3">
+        {/* smart moves — the hero column: ranked list, color only on savings */}
+        <div className="lg:col-span-3 surface rounded-2xl p-5">
+          <div className="flex items-center justify-between">
             <p className="font-medium text-[13px] tracking-tight">Smart moves</p>
+            <span className="text-[10px] num text-faint uppercase tracking-[0.08em]">ranked by impact</span>
           </div>
-          <p className="text-[11px] text-faint mt-0.5">What the numbers suggest, ranked by impact</p>
-          <div className="mt-4 space-y-2">
-            {moves.map((m, i) => {
-              const color = m.tone === 'faint' ? 'var(--text-muted)' : `var(--${m.tone})`;
-              return (
-                <div key={i} className="surface-2 rounded-xl px-3.5 py-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[12px] font-medium leading-snug" style={{ color }}>{m.head}</p>
-                    {m.save ? <span className="num text-[10.5px] font-semibold whitespace-nowrap px-1.5 py-[2px] rounded-[5px]" style={{ background: 'var(--up-soft)', color: 'var(--up)' }}>saves {fmtINR(Math.round(m.save))}</span> : null}
-                  </div>
-                  <p className="text-[11px] text-faint leading-[1.6] mt-1">{m.body}</p>
+          <div className="mt-3">
+            {moves.map((m, i) => (
+              <div key={i} className="flex items-start gap-4 py-3.5" style={i < moves.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
+                <span className="num text-[11px] text-faint mt-[2px] w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12.5px] font-medium leading-snug" style={m.tone === 'faint' ? { color: 'var(--text-muted)' } : {}}>{m.head}</p>
+                  <p className="text-[11.5px] text-faint leading-[1.65] mt-1">{m.body}</p>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* long-term clock */}
-        <div className="surface rounded-2xl p-5">
-          <p className="font-medium text-[13px] tracking-tight">Long-term clock</p>
-          <p className="text-[11px] text-faint mt-0.5">Each holding's path to the 12.5% rate</p>
-          <div className="mt-5 space-y-4">
-            {rows.sort((a, b) => a.t.daysToLT - b.t.daysToLT).map(({ h, t }) => (
-              <div key={h.id}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-medium">{h.symbol}</span>
-                    {t.isLT ? <span className="text-[10px] num" style={{ color: 'var(--up)' }}>LT ✓</span>
-                            : <span className="text-[10px] num text-faint">LT on {ltDate(h)}</span>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!t.isLT && t.gain > 0 && (
-                      <span className="num text-[9.5px] px-1.5 py-[1px] rounded-[4px]" style={{ background: 'var(--warn-soft)', color: 'var(--warn)' }}>
-                        wait → save {fmtINR(Math.round(t.gain * (STCG_RATE - LTCG_RATE)))}
-                      </span>
-                    )}
-                    <span className="text-[10px] num text-faint">{Math.min(t.heldDays, 365)}/365</span>
-                  </div>
-                </div>
-                <div className="h-[3px] rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-                  <div className="h-full rounded-full" style={{
-                    width: `${Math.min(100, (t.heldDays / 365) * 100)}%`,
-                    background: t.isLT ? 'var(--up)' : 'var(--accent)', opacity: 0.9,
-                  }}></div>
-                </div>
+                {m.save ? (
+                  <span className="num text-[11.5px] font-medium whitespace-nowrap mt-[2px]" style={{ color: 'var(--up)' }}>+{fmtINR(Math.round(m.save))}</span>
+                ) : (
+                  <span className="num text-[11.5px] text-faint whitespace-nowrap mt-[2px]">—</span>
+                )}
               </div>
             ))}
           </div>
         </div>
 
-        {/* loss harvesting */}
-        <div className="surface rounded-2xl p-5">
-          <p className="font-medium text-[13px] tracking-tight">Loss harvesting</p>
+        {/* loss harvesting — compact side column */}
+        <div className="lg:col-span-2 surface rounded-2xl p-5">
+          <div className="flex items-center justify-between">
+            <p className="font-medium text-[13px] tracking-tight">Loss harvesting</p>
+            {harvestSaving > 0 && <span className="num text-[11.5px] font-medium" style={{ color: 'var(--up)' }}>+{fmtINR(Math.round(harvestSaving))} this FY</span>}
+          </div>
           <p className="text-[11px] text-faint mt-0.5">Losses you could book to offset gains</p>
           {harvestables.length ? (
-            <div className="mt-4 space-y-2">
-              {harvestables.map(({ h, t }) => (
-                <div key={h.id} className="surface-2 rounded-xl px-3.5 py-3 flex items-center justify-between">
+            <div className="mt-3">
+              {harvestables.map(({ h, t }, i) => (
+                <div key={h.id} className="flex items-center justify-between py-3" style={i < harvestables.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
                   <div className="flex items-center gap-2.5">
                     <Mark mono={h.mono} hue={h.hue} size="sm" />
                     <div>
                       <p className="text-[12px] font-medium">{h.symbol}</p>
-                      <p className="text-[10px] num text-faint">{t.isLT ? 'long-term' : 'short-term'}{!t.isLT && ' · offsets any gain'}</p>
+                      <p className="text-[10px] num text-faint">{t.isLT ? 'long-term' : 'short-term · offsets any gain'}</p>
                     </div>
                   </div>
-                  <span className="text-[12.5px] num font-medium" style={{ color: 'var(--down)' }}>{fmtINR(Math.round(t.gain))}</span>
+                  <span className="text-[12px] num" style={{ color: 'var(--down)' }}>{fmtINR(Math.round(t.gain))}</span>
                 </div>
               ))}
-              {harvestSaving > 0 && (
-                <div className="rounded-xl px-3.5 py-3 flex items-center justify-between" style={{ background: 'var(--up-soft)' }}>
-                  <span className="text-[11.5px] font-medium" style={{ color: 'var(--up)' }}>Potential tax saved this FY</span>
-                  <span className="text-[13px] num font-semibold" style={{ color: 'var(--up)' }}>{fmtINR(Math.round(harvestSaving))}</span>
-                </div>
-              )}
-              <p className="text-[11px] text-faint leading-[1.6] pt-1.5">
+              <p className="text-[10.5px] text-faint leading-[1.6] pt-3" style={{ borderTop: '1px solid var(--border)' }}>
                 Short-term losses offset both ST and LT gains. Unused losses carry forward 8 years if you file on time.
               </p>
             </div>
           ) : <p className="mt-4 text-[12px] text-muted">No unrealized losses — nothing to harvest.</p>}
         </div>
+      </div>
+
+      {/* long-term timeline — full width, real time axis */}
+      <div className="surface rounded-2xl p-5 mt-3">
+        <div className="flex items-center justify-between">
+          <p className="font-medium text-[13px] tracking-tight">Long-term timeline</p>
+          <p className="text-[10px] num text-faint uppercase tracking-[0.08em]">
+            already long-term · {rows.filter(r => r.t.isLT).map(r => r.h.symbol).join(' · ')} <span style={{ color: 'var(--up)' }}>✓</span>
+          </p>
+        </div>
+        <p className="text-[11px] text-faint mt-0.5">When each holding crosses 12 months and its tax rate drops to 12.5%</p>
+        {(() => {
+          const pending = rows.filter(r => !r.t.isLT).sort((a, b) => a.t.daysToLT - b.t.daysToLT);
+          const fyEnd = new Date('2027-03-31');
+          const span = fyEnd - TODAY;
+          const pos = d => Math.min(96, Math.max(3, ((d - TODAY) / span) * 100));
+          return (
+            <div className="mt-10 mb-2 px-2">
+              <div className="relative" style={{ height: 76 }}>
+                {/* axis */}
+                <div className="absolute left-0 right-0 top-[18px] h-px" style={{ background: 'var(--border-strong)' }}></div>
+                {/* today cap */}
+                <div className="absolute top-[14px]" style={{ left: 0 }}>
+                  <div className="w-[7px] h-[7px] rounded-full mt-[1px]" style={{ background: 'var(--text)', marginLeft: -3 }}></div>
+                  <p className="text-[9.5px] num text-faint mt-2" style={{ marginLeft: -6 }}>today</p>
+                </div>
+                {/* FY end cap */}
+                <div className="absolute top-[14px]" style={{ right: 0 }}>
+                  <div className="w-px h-[9px]" style={{ background: 'var(--border-strong)', marginLeft: 'auto' }}></div>
+                  <p className="text-[9.5px] num text-faint mt-2 text-right">FY end · 31 Mar</p>
+                </div>
+                {/* markers */}
+                {pending.map(({ h, t }) => {
+                  const d = new Date(new Date(h.buyDate).getTime() + 365 * 86400000);
+                  const save = t.gain > 0 ? t.gain * (STCG_RATE - LTCG_RATE) : 0;
+                  return (
+                    <div key={h.id} className="absolute" style={{ left: `${pos(d)}%`, top: 0 }}>
+                      <p className="text-[11px] font-medium whitespace-nowrap" style={{ transform: 'translateX(-50%)' }}>{h.symbol}</p>
+                      <div className="w-[7px] h-[7px] rounded-full mt-[11px]" style={{ background: 'var(--surface)', border: '1.5px solid var(--text-muted)', transform: 'translateX(-50%)' }}></div>
+                      <div className="mt-2" style={{ transform: 'translateX(-50%)' }}>
+                        <p className="text-[10px] num text-faint whitespace-nowrap text-center">{d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {t.daysToLT}d</p>
+                        {save > 0 && <p className="text-[10px] num whitespace-nowrap text-center mt-0.5" style={{ color: 'var(--up)' }}>+{fmtINR(Math.round(save))} if you wait</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
