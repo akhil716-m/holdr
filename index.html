@@ -632,24 +632,42 @@ function MarketPulse() {
 function DailyRecap({ holdings, totals, mode }) {
   const flagged = holdings.filter(h => h.action === 'review');
   const maturing = holdings.map(h => ({ h, t: taxInfo(h) })).filter(x => !x.t.isLT && x.t.daysToLT <= 90).sort((a, b) => a.t.daysToLT - b.t.daysToLT);
-  const T = ({ children }) => <span className="font-medium" style={{ color: 'var(--text)' }}>{children}</span>;
+  const hdfc = holdings.find(h => h.id === 'hdfc');
+
+  const items = [
+    {
+      lead: <Delta value={totals.pnlPct} />,
+      text: <>overall · {totals.alphaPeriod >= 0 ? 'beating' : 'trailing'} NIFTY by <span className="num font-medium" style={{ color: 'var(--text)' }}>{Math.abs(totals.alphaPeriod).toFixed(1)}%</span></>,
+    },
+    flagged.length > 0 && {
+      lead: <div className="flex -space-x-1.5">{flagged.map(h => <Mark key={h.id} mono={h.mono} hue={h.hue} size="sm" />)}</div>,
+      text: <>{flagged.map((h, i) => <React.Fragment key={h.id}>{i > 0 && ' · '}<span className="font-medium" style={{ color: 'var(--text)' }}>{h.symbol}</span> thesis {h.thesisStatus}</React.Fragment>)}</>,
+    },
+    maturing.length > 0 && {
+      lead: <Mark mono={maturing[0].h.mono} hue={maturing[0].h.hue} size="sm" />,
+      text: <>long-term in <span className="num font-medium" style={{ color: 'var(--text)' }}>{maturing[0].t.daysToLT}d</span> · tax drops <span className="num">20% → 12.5%</span></>,
+    },
+    hdfc && {
+      lead: <Mark mono={hdfc.mono} hue={hdfc.hue} size="sm" />,
+      text: <>ex-dividend <span className="num font-medium" style={{ color: 'var(--text)' }}>Jun 18</span> · hold through to get paid</>,
+    },
+  ].filter(Boolean);
+
   return (
     <div className="surface rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <span className="w-1 h-1 rounded-full pulse-dot" style={{ background: 'var(--accent)', color: 'var(--accent)' }}></span>
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-faint">{mode === 'active' ? 'Daily recap' : 'Weekly recap'}</p>
         </div>
-        <span className="text-[10px] num text-faint">generated {mode === 'active' ? 'at 9:15 AM' : 'Mon 9:15 AM'}</span>
+        <span className="text-[10px] num text-faint">{mode === 'active' ? '9:15 AM' : 'Mon 9:15'}</span>
       </div>
-      <p className="text-[13.5px] leading-[1.7] text-muted">
-        Your portfolio is {totals.pnl >= 0 ? 'up' : 'down'} <T>{Math.abs(totals.pnlPct).toFixed(1)}%</T> overall,
-        {' '}{totals.alphaPeriod >= 0 ? 'beating' : 'trailing'} the NIFTY 50 by <T>{Math.abs(totals.alphaPeriod).toFixed(1)}%</T>.
-        {flagged.length > 0 && <> {flagged.map(h => h.symbol).join(' and ')} {flagged.length > 1 ? 'remain' : 'remains'} flagged —
-        {' '}{flagged.map(h => `${h.symbol}'s thesis looks ${h.thesisStatus}`).join(', while ')}.</>}
-        {maturing.length > 0 && <> <T>{maturing[0].h.symbol}</T> turns long-term in <T>{maturing[0].t.daysToLT} days</T>, dropping its tax rate from 20% to 12.5%.</>}
-        {' '}HDFCBANK goes ex-dividend on <T>Jun 18</T> — hold through the date to receive the payout.
-      </p>
+      {items.map((it, i) => (
+        <div key={i} className="flex items-center gap-3 py-2.5" style={i < items.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
+          <div className="shrink-0 flex items-center min-w-[28px]">{it.lead}</div>
+          <p className="text-[12px] text-muted leading-snug min-w-0">{it.text}</p>
+        </div>
+      ))}
     </div>
   );
 }
