@@ -587,7 +587,7 @@ function TaxView({ holdings }) {
           <div>
             <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">If you sold everything today</p>
             <div className="flex items-baseline gap-3 mt-2">
-              <p className="text-[32px] num font-medium tracking-tight leading-none" style={{ color: 'var(--warn)' }}>{fmtINR(Math.round(totalTax))}</p>
+              <p className="text-[32px] num font-medium tracking-tight leading-none">{fmtINR(Math.round(totalTax))}</p>
               <span className="text-[12px] text-muted">tax on {fmtINR(Math.round(netGain))} net gains</span>
             </div>
             <p className="text-[11px] text-faint mt-2">effective rate {netGain > 0 ? ((totalTax / netGain) * 100).toFixed(1) : '0.0'}% · indicative · equity delivery · FY26</p>
@@ -596,25 +596,25 @@ function TaxView({ holdings }) {
           <div className="min-w-[220px] flex-1 max-w-[320px]">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">₹1.25L LT exemption</span>
-              <span className="text-[10.5px] num" style={{ color: 'var(--up)' }}>{fmtINR(Math.round(exemptionLeft))} room left</span>
+              <span className="text-[10.5px] num text-muted">{fmtINR(Math.round(exemptionLeft))} room left</span>
             </div>
-            <div className="h-[5px] rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-              <div className="h-full rounded-full" style={{ width: `${(exemptionUsed / LTCG_EXEMPTION) * 100}%`, background: 'var(--up)' }}></div>
+            <div className="h-[4px] rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+              <div className="h-full rounded-full" style={{ width: `${(exemptionUsed / LTCG_EXEMPTION) * 100}%`, background: 'var(--up)', opacity: .8 }}></div>
             </div>
             <p className="text-[10.5px] text-faint mt-1.5 leading-[1.5]">Only {((exemptionUsed / LTCG_EXEMPTION) * 100).toFixed(0)}% used — you can realise {fmtINR(Math.round(exemptionLeft))} more LT gains this FY tax-free.</p>
           </div>
         </div>
-        {/* composition bar */}
+        {/* composition bar — gains vs losses only; LT/ST split by shade */}
         <div className="mt-5">
-          <div className="h-[8px] rounded-full overflow-hidden flex" style={{ background: 'var(--border)' }}>
-            <div style={{ width: seg(ltGain), background: 'var(--up)', opacity: .9 }}></div>
-            <div style={{ width: seg(stGain), background: 'var(--warn)', opacity: .9 }}></div>
-            <div style={{ width: seg(Math.abs(losses)), background: 'var(--down)', opacity: .85 }}></div>
+          <div className="h-[4px] rounded-full overflow-hidden flex gap-[3px]">
+            <div className="rounded-full" style={{ width: seg(ltGain), background: 'var(--up)', opacity: .75 }}></div>
+            <div className="rounded-full" style={{ width: seg(stGain), background: 'var(--up)', opacity: .3 }}></div>
+            <div className="rounded-full" style={{ width: seg(Math.abs(losses)), background: 'var(--down)', opacity: .55 }}></div>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2.5">
-            <span className="text-[10.5px] text-muted flex items-center gap-1.5"><span className="w-2 h-2 rounded-[3px]" style={{ background: 'var(--up)' }}></span>LT gains <span className="num">{fmtINR(Math.round(ltGain))}</span> <span className="num text-faint">· tax {fmtINR(Math.round(ltTax))}</span></span>
-            <span className="text-[10.5px] text-muted flex items-center gap-1.5"><span className="w-2 h-2 rounded-[3px]" style={{ background: 'var(--warn)' }}></span>ST gains <span className="num">{fmtINR(Math.round(stGain))}</span> <span className="num text-faint">· tax {fmtINR(Math.round(stTax))}</span></span>
-            <span className="text-[10.5px] text-muted flex items-center gap-1.5"><span className="w-2 h-2 rounded-[3px]" style={{ background: 'var(--down)' }}></span>Unbooked losses <span className="num">{fmtINR(Math.round(losses))}</span></span>
+            <span className="text-[10.5px] text-faint flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--up)', opacity: .75 }}></span>LT gains <span className="num text-muted">{fmtINR(Math.round(ltGain))}</span> <span className="num">· tax {fmtINR(Math.round(ltTax))}</span></span>
+            <span className="text-[10.5px] text-faint flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--up)', opacity: .3 }}></span>ST gains <span className="num text-muted">{fmtINR(Math.round(stGain))}</span> <span className="num">· tax {fmtINR(Math.round(stTax))}</span></span>
+            <span className="text-[10.5px] text-faint flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--down)', opacity: .55 }}></span>Unbooked losses <span className="num text-muted">{fmtINR(Math.round(losses))}</span></span>
           </div>
         </div>
       </div>
