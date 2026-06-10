@@ -1446,20 +1446,105 @@ function App() {
         {tab === 'holdings' && (
           <div className="fade-up">
             <section className="mt-9 flex items-center justify-between gap-3 flex-wrap">
-              <h1 className="text-[20px] font-medium tracking-tight">Holdings</h1>
-              <div className="flex items-center gap-1.5">
-                {filters.map(([key, label]) => (
-                  <button key={key} onClick={() => setFilter(key)}
-                    className="whitespace-nowrap px-3 py-1.5 rounded-full text-[11.5px] font-medium transition-colors"
-                    style={filter === key ? { background: 'var(--text)', color: 'var(--bg)' } : { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                    {label}
-                  </button>
-                ))}
+              <div>
+                <h1 className="text-[20px] font-medium tracking-tight">Holdings</h1>
+                <p className="text-[11px] num text-faint mt-1">{investorMode === 'active' ? 'sorted by day move' : 'sorted by attention'} · {filtered.length} of {holdings.length} positions</p>
+              </div>
+              <button onClick={() => setShowAdd(true)}
+                className="px-3.5 py-2 rounded-full text-[12px] font-medium transition-opacity hover:opacity-90 flex items-center gap-1.5"
+                style={{ background: 'var(--text)', color: 'var(--bg)' }}>
+                + Add position
+              </button>
+            </section>
+
+            {/* insight strip — what the table can't say at a glance */}
+            <section className="mt-5 grid sm:grid-cols-3 gap-3">
+              {/* allocation */}
+              <div className="surface rounded-2xl p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">Allocation</p>
+                  {(() => {
+                    const top = [...holdings].sort((a, b) => b.qty * b.ltp - a.qty * a.ltp)[0];
+                    const topW = (top.qty * top.ltp / totals.current) * 100;
+                    return <span className="text-[10px] num text-faint">{top.symbol} · {topW.toFixed(0)}% of portfolio</span>;
+                  })()}
+                </div>
+                <div className="mt-3 h-[6px] rounded-full overflow-hidden flex gap-[2px]">
+                  {[...holdings].sort((a, b) => b.qty * b.ltp - a.qty * a.ltp).map(h => (
+                    <div key={h.id} title={`${h.symbol} · ${((h.qty * h.ltp / totals.current) * 100).toFixed(1)}%`}
+                      className="rounded-full" style={{ width: `${(h.qty * h.ltp / totals.current) * 100}%`, background: h.hue, opacity: .85 }}></div>
+                  ))}
+                </div>
+                <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1">
+                  {[...holdings].sort((a, b) => b.qty * b.ltp - a.qty * a.ltp).slice(0, 4).map(h => (
+                    <span key={h.id} className="text-[10px] text-faint flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: h.hue, opacity: .85 }}></span>
+                      {h.symbol} <span className="num text-muted">{((h.qty * h.ltp / totals.current) * 100).toFixed(0)}%</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              {/* thesis health */}
+              <div className="surface rounded-2xl p-4">
+                <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">Thesis health</p>
+                {(() => {
+                  const counts = { intact: 0, shaky: 0, broken: 0 };
+                  holdings.forEach(h => counts[h.thesisStatus]++);
+                  const tones = { intact: 'up', shaky: 'warn', broken: 'down' };
+                  return (
+                    <React.Fragment>
+                      <div className="mt-3 h-[6px] rounded-full overflow-hidden flex gap-[2px]">
+                        {['intact', 'shaky', 'broken'].map(k => counts[k] > 0 && (
+                          <div key={k} className="rounded-full" style={{ width: `${(counts[k] / holdings.length) * 100}%`, background: `var(--${tones[k]})`, opacity: .8 }}></div>
+                        ))}
+                      </div>
+                      <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1">
+                        {['intact', 'shaky', 'broken'].map(k => (
+                          <span key={k} className="text-[10px] text-faint flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: `var(--${tones[k]})`, opacity: .8 }}></span>
+                            {counts[k]} {k}
+                          </span>
+                        ))}
+                      </div>
+                    </React.Fragment>
+                  );
+                })()}
+              </div>
+              {/* movers today */}
+              <div className="surface rounded-2xl p-4">
+                <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">Today's movers</p>
+                {(() => {
+                  const sorted = [...holdings].sort((a, b) => (trends[b.id]?.dayChange ?? 0) - (trends[a.id]?.dayChange ?? 0));
+                  const best = sorted[0], worst = sorted[sorted.length - 1];
+                  return (
+                    <div className="mt-3 space-y-2">
+                      {[best, worst].map((h, i) => (
+                        <div key={h.id} className="flex items-center gap-2">
+                          <span className="text-[9px] uppercase tracking-[0.08em] text-faint w-[30px]">{i === 0 ? 'best' : 'worst'}</span>
+                          <Mark mono={h.mono} hue={h.hue} size="sm" />
+                          <span className="text-[11.5px] font-medium flex-1 truncate">{h.symbol}</span>
+                          <Delta value={trends[h.id]?.dayChange ?? 0} precision={2} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </section>
-            <p className="text-[11px] num text-faint mt-2">{investorMode === 'active' ? 'sorted by day move' : 'sorted by attention'} · {filtered.length} of {holdings.length} positions</p>
 
-            <section className="mt-4 surface rounded-2xl overflow-hidden">
+            {/* filters — directly above the table */}
+            <section className="mt-5 flex items-center gap-1.5 overflow-x-auto pb-1">
+              {filters.map(([key, label]) => (
+                <button key={key} onClick={() => setFilter(key)}
+                  className="whitespace-nowrap px-3 py-1.5 rounded-full text-[11.5px] font-medium transition-colors"
+                  style={filter === key ? { background: 'var(--text)', color: 'var(--bg)' } : { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                  {label}
+                  {key !== 'all' && <span className="num text-[10px] ml-1.5 opacity-70">{holdings.filter(h => h.action === key).length}</span>}
+                </button>
+              ))}
+            </section>
+
+            <section className="mt-3 surface rounded-2xl overflow-hidden">
               <div className="hidden sm:flex items-center gap-4 px-4 py-2.5 text-[9px] uppercase tracking-[0.1em] text-faint font-semibold" style={{ borderBottom: '1px solid var(--border)' }}>
                 <div className="w-[44%] sm:w-[26%]">Position</div>
                 <div className="hidden md:block w-[13%]">Trend</div>
@@ -1478,12 +1563,6 @@ function App() {
               )}
             </section>
 
-            <button onClick={() => setShowAdd(true)}
-              className="mt-4 w-full rounded-2xl p-4.5 py-4 text-center hov"
-              style={{ border: '1px dashed var(--border-strong)' }}>
-              <p className="font-medium text-[12.5px]">+ Add another position</p>
-              <p className="text-[10.5px] text-faint mt-0.5">Search & add, or upload your broker's P&L statement</p>
-            </button>
           </div>
         )}
 
