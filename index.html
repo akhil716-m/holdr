@@ -318,6 +318,26 @@ const RADAR = [
   { label: 'GST council meet', date: 'Jul 21', note: 'Possible EV component rate cut', type: 'policy' },
 ];
 
+/* macro forces that set market mood — shown on Today */
+const MARKET_INFLUENCES = [
+  { id: 'usdinr', label: 'USD / INR', value: '₹83.42', chg: +0.14, invert: true,
+    note: 'Weaker rupee lifts IT exporters, hurts importers' },
+  { id: 'gold', label: 'Gold', value: '₹72,840', unit: '/10g', chg: +0.42, invert: true,
+    note: 'Risk-off money moving to safety' },
+  { id: 'silver', label: 'Silver', value: '₹91,250', unit: '/kg', chg: -0.61, invert: true,
+    note: 'Industrial demand cooling' },
+  { id: 'crude', label: 'Brent crude', value: '$68.4', chg: -1.18, invert: true,
+    note: 'Cheaper oil eases inflation — good for India' },
+  { id: 'vix', label: 'India VIX', value: '13.2', chg: -3.1, invert: true,
+    note: 'Fear gauge — falling VIX means calmer markets' },
+];
+
+/* institutional flows — who's buying, who's selling (₹ crore, net) */
+const FLOWS = {
+  fii: { today: -1240, week: [-820, -1510, +340, -960, -1240] },
+  dii: { today: +1890, week: [+1120, +1760, +890, +1430, +1890] },
+};
+
 const SENTIMENT_META = {
   positive: { label: 'Positive', tone: 'up' },
   neutral:  { label: 'Neutral',  tone: 'warn' },
@@ -521,6 +541,71 @@ function SectorList({ holdings }) {
 
 /* ============================ DAILY RECAP ================================== */
 /* prose digest — Fey's editorial recap, generated from portfolio state */
+/* ========================= MARKET INFLUENCES =============================== */
+/* macro tiles + FII/DII flows — the forces behind today's mood */
+function MarketPulse() {
+  const maxFlow = Math.max(...FLOWS.fii.week.map(Math.abs), ...FLOWS.dii.week.map(Math.abs));
+  return (
+    <div className="surface rounded-2xl px-5 py-4">
+      <div className="flex items-stretch gap-5 overflow-x-auto pb-1">
+        {MARKET_INFLUENCES.map((m, i) => (
+          <div key={m.id} className="min-w-[120px] shrink-0 group relative cursor-default"
+            style={{ borderRight: '1px solid var(--border)', paddingRight: 20 }}>
+            <p className="text-[9.5px] uppercase tracking-[0.1em] text-faint font-semibold whitespace-nowrap">{m.label}</p>
+            <div className="flex items-baseline gap-1.5 mt-1.5">
+              <p className="text-[14px] num font-medium whitespace-nowrap">{m.value}<span className="text-[9px] text-faint">{m.unit || ''}</span></p>
+              <Delta value={m.chg} precision={2} />
+            </div>
+            <p className="text-[9.5px] text-faint leading-[1.45] mt-1.5 max-w-[150px]">{m.note}</p>
+          </div>
+        ))}
+
+        {/* FII / DII flows — paired daily bars, the buy/sell tug-of-war */}
+        <div className="min-w-[230px] shrink-0">
+          <div className="flex items-center justify-between">
+            <p className="text-[9.5px] uppercase tracking-[0.1em] text-faint font-semibold">Institutional flows <span className="normal-case">· ₹ cr · 5d</span></p>
+          </div>
+          <div className="flex items-end gap-4 mt-1.5">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-medium text-muted">FII</span>
+                <span className="num text-[12px] font-medium" style={{ color: FLOWS.fii.today >= 0 ? 'var(--up)' : 'var(--down)' }}>
+                  {FLOWS.fii.today >= 0 ? '+' : ''}{FLOWS.fii.today.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[9px] text-faint">{FLOWS.fii.today >= 0 ? 'buying' : 'selling'}</span>
+              </div>
+              <div className="flex items-end gap-[3px] mt-1.5" style={{ height: 22 }}>
+                {FLOWS.fii.week.map((v, j) => (
+                  <span key={j} className="w-[7px] rounded-[2px]" title={`${v >= 0 ? '+' : ''}${v.toLocaleString('en-IN')} cr`}
+                    style={{ height: `${Math.max(15, (Math.abs(v) / maxFlow) * 100)}%`, background: v >= 0 ? 'var(--up)' : 'var(--down)', opacity: j === 4 ? 1 : 0.45 }}></span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-medium text-muted">DII</span>
+                <span className="num text-[12px] font-medium" style={{ color: FLOWS.dii.today >= 0 ? 'var(--up)' : 'var(--down)' }}>
+                  {FLOWS.dii.today >= 0 ? '+' : ''}{FLOWS.dii.today.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[9px] text-faint">{FLOWS.dii.today >= 0 ? 'buying' : 'selling'}</span>
+              </div>
+              <div className="flex items-end gap-[3px] mt-1.5" style={{ height: 22 }}>
+                {FLOWS.dii.week.map((v, j) => (
+                  <span key={j} className="w-[7px] rounded-[2px]" title={`${v >= 0 ? '+' : ''}${v.toLocaleString('en-IN')} cr`}
+                    style={{ height: `${Math.max(15, (Math.abs(v) / maxFlow) * 100)}%`, background: v >= 0 ? 'var(--up)' : 'var(--down)', opacity: j === 4 ? 1 : 0.45 }}></span>
+                ))}
+              </div>
+            </div>
+            <p className="text-[9.5px] text-faint leading-[1.45] max-w-[120px] pb-0.5">
+              {FLOWS.fii.today < 0 && FLOWS.dii.today > 0 ? 'Foreign money exiting, domestic funds absorbing — a tug-of-war.' : 'Institutions aligned today.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DailyRecap({ holdings, totals, mode }) {
   const flagged = holdings.filter(h => h.action === 'review');
   const maturing = holdings.map(h => ({ h, t: taxInfo(h) })).filter(x => !x.t.isLT && x.t.daysToLT <= 90).sort((a, b) => a.t.daysToLT - b.t.daysToLT);
@@ -1387,7 +1472,12 @@ function App() {
               </h1>
             </section>
 
-            <section className="mt-6 grid lg:grid-cols-5 gap-3 items-stretch">
+            {/* macro influences — what's setting the mood today */}
+            <section className="mt-6">
+              <MarketPulse />
+            </section>
+
+            <section className="mt-3 grid lg:grid-cols-5 gap-3 items-stretch">
               {/* chart card */}
               <div className="lg:col-span-3 surface rounded-2xl overflow-hidden flex flex-col">
                 <div className="p-5 pb-0">
