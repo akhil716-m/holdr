@@ -475,21 +475,32 @@ const PERIOD_API = {
   'All': { range: '2y', interval: '1wk' },
 };
 const PROXIES = [
-  u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
   u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
 ];
 async function fetchWithProxy(url) {
   for (const wrap of PROXIES) {
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 9000);
+      const t = setTimeout(() => ctrl.abort(), 12000);
       const res = await fetch(wrap(url), { signal: ctrl.signal });
       clearTimeout(t);
       if (!res.ok) continue;
-      return await res.json();
+      const j = await res.json();
+      if (j && j.chart) return j; // only accept a real Yahoo payload — proxies return their own error JSON with status 200
     } catch (e) { /* try next proxy */ }
   }
   return null;
+}
+/* limit concurrency so the proxy/Yahoo don't rate-limit a 12-request burst */
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) { const idx = i++; out[idx] = await fn(items[idx], idx); }
+  }));
+  return out;
 }
 async function fetchChart(sym, range, interval) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}`;
@@ -1558,12 +1569,16 @@ function App() {
     let cancelled = false;
     async function load() {
       const { range, interval } = PERIOD_API[period] || PERIOD_API['1M'];
-      const [niftyRes, quoteRes, macroRes] = await Promise.all([
-        fetchChart('^NSEI', range, interval),
-        Promise.all(baseHoldings.map(async h => [h.symbol, await fetchChart(ySymbol(h.symbol), range, interval)])),
-        Promise.all(MACRO_SYMBOLS.map(async ([id, sym]) => [id, await fetchChart(sym, '1mo', '1d')])),
-      ]);
+      const tasks = [
+        { kind: 'nifty', sym: '^NSEI', range, interval },
+        ...baseHoldings.map(h => ({ kind: 'quote', key: h.symbol, sym: ySymbol(h.symbol), range, interval })),
+        ...MACRO_SYMBOLS.map(([id, sym]) => ({ kind: 'macro', key: id, sym, range: '1mo', interval: '1d' })),
+      ];
+      const results = await mapLimit(tasks, 3, t => fetchChart(t.sym, t.range, t.interval));
       if (cancelled) return;
+      const niftyRes = results[tasks.findIndex(t => t.kind === 'nifty')];
+      const quoteRes = tasks.map((t, i) => t.kind === 'quote' ? [t.key, results[i]] : null).filter(Boolean);
+      const macroRes = tasks.map((t, i) => t.kind === 'macro' ? [t.key, results[i]] : null).filter(Boolean);
       const quotes = {};
       quoteRes.forEach(([s, q]) => { if (q) quotes[s] = q; });
       const inrQ = macroRes.find(([id]) => id === 'usdinr');
