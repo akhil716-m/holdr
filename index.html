@@ -689,23 +689,37 @@ function DailyRecap({ holdings, totals, mode }) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4">
-        {/* performance — big delta + race bars */}
-        <div className="flex items-center gap-3.5 px-4 first:pl-0 py-2" >
-          <div className="shrink-0">
-            <p className="text-[20px] num font-medium leading-none" style={{ color: up ? 'var(--up)' : 'var(--down)' }}>{up ? '+' : ''}{totals.pnlPct.toFixed(1)}%</p>
-            <div className="mt-2 space-y-1">
-              <div className="flex items-center gap-1.5">
-                <span className="h-[3px] rounded-full" style={{ width: 36, background: up ? 'var(--up)' : 'var(--down)' }}></span>
-                <span className="text-[8px] num text-faint">you</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="h-[3px] rounded-full" style={{ width: 36 * Math.max(0.15, Math.min(2, (totals.pnlPct - totals.alphaPeriod) / (totals.pnlPct || 1))), background: 'var(--chart-grey)' }}></span>
-                <span className="text-[8px] num text-faint">NIFTY</span>
+        {/* performance — the race, told as two labeled bars + a verdict */}
+        {(() => {
+          const youPct = totals.pnlPct;
+          const niftyPct = totals.pnlPct - totals.alphaPeriod;
+          const maxAbs = Math.max(Math.abs(youPct), Math.abs(niftyPct)) || 1;
+          const barW = v => Math.max(8, (Math.abs(v) / maxAbs) * 92);
+          const Row = ({ label, v, you }) => (
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] num text-faint w-[34px] shrink-0">{label}</span>
+              <span className="h-[5px] rounded-full shrink-0" style={{
+                width: barW(v),
+                background: you ? (v >= 0 ? 'var(--up)' : 'var(--down)') : 'var(--chart-grey)',
+              }}></span>
+              <span className="text-[10.5px] num font-medium shrink-0" style={{ color: you ? (v >= 0 ? 'var(--up)' : 'var(--down)') : 'var(--text-muted)' }}>
+                {v >= 0 ? '+' : ''}{v.toFixed(1)}%
+              </span>
+            </div>
+          );
+          return (
+            <div className="px-4 first:pl-0 py-2">
+              <p className="text-[13px] font-medium leading-none">
+                {ahead ? 'Beating the market' : 'Trailing the market'}
+                <span className="num ml-1.5" style={{ color: ahead ? 'var(--up)' : 'var(--warn)' }}>{ahead ? '+' : '−'}{Math.abs(totals.alphaPeriod).toFixed(1)}%</span>
+              </p>
+              <div className="mt-3 space-y-2">
+                <Row label="you" v={youPct} you />
+                <Row label="NIFTY" v={niftyPct} />
               </div>
             </div>
-          </div>
-          <p className="text-[11px] text-muted leading-[1.5]">{ahead ? 'beating' : 'trailing'} the market by <span className="num font-medium" style={{ color: 'var(--text)' }}>{Math.abs(totals.alphaPeriod).toFixed(1)}%</span></p>
-        </div>
+          );
+        })()}
 
         {/* flagged theses */}
         <div className="flex items-center gap-3.5 px-4 py-2" style={{ borderLeft: '1px solid var(--border)' }}>
