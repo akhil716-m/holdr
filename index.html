@@ -520,6 +520,75 @@ const ySymbol = sym => sym.replace(/[^A-Z0-9-]/g, '') + '.NS';
 const MACRO_SYMBOLS = [['usdinr', 'INR=X'], ['gold', 'GC=F'], ['silver', 'SI=F'], ['crude', 'BZ=F'], ['vix', '^INDIAVIX']];
 const OZ_GRAMS = 31.1035;
 
+/* ----------------------- Upstox (via local bridge) ------------------------- */
+/* run `ruby scripts/upstox_proxy.rb` and visit localhost:8765/login once a day */
+const UPSTOX_BASE = 'http://localhost:8765';
+const UPSTOX_KEYS = {
+  TCS: 'NSE_EQ|INE467B01029',
+  HDFCBANK: 'NSE_EQ|INE040A01034',
+  INFY: 'NSE_EQ|INE009A01021',
+  TATAMOTORS: 'NSE_EQ|INE155A01022',
+  ETERNAL: 'NSE_EQ|INE758T01015',
+  PAYTM: 'NSE_EQ|INE982J01020',
+  RELIANCE: 'NSE_EQ|INE002A01018',
+  ICICIBANK: 'NSE_EQ|INE090A01021',
+  ITC: 'NSE_EQ|INE154A01025',
+  WIPRO: 'NSE_EQ|INE075A01022',
+  SUNPHARMA: 'NSE_EQ|INE044A01036',
+  NIFTY: 'NSE_INDEX|Nifty 50',
+};
+const UPSTOX_PERIOD = {
+  '1D': { kind: 'intraday', interval: '30minute' },
+  '1W': { kind: 'hist', interval: '30minute', days: 7 },
+  '1M': { kind: 'hist', interval: 'day', days: 32 },
+  '3M': { kind: 'hist', interval: 'day', days: 93 },
+  'YTD': { kind: 'hist', interval: 'day', days: 366 },
+  '1Y': { kind: 'hist', interval: 'day', days: 366 },
+  'All': { kind: 'hist', interval: 'week', days: 731 },
+};
+const dstr = d => d.toISOString().slice(0, 10);
+async function upstoxJSON(path) {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch(UPSTOX_BASE + path, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j && j.status === 'success' ? j.data : null;
+  } catch (e) { return null; }
+}
+async function fetchUpstoxChart(symKey, period) {
+  const k = UPSTOX_KEYS[symKey];
+  if (!k) return null;
+  const cfg = UPSTOX_PERIOD[period] || UPSTOX_PERIOD['1M'];
+  const enc = encodeURIComponent(k);
+  let data;
+  if (cfg.kind === 'intraday') {
+    data = await upstoxJSON(`/api/v2/historical-candle/intraday/${enc}/${cfg.interval}`);
+  } else {
+    const now = new Date();
+    data = await upstoxJSON(`/api/v2/historical-candle/${enc}/${cfg.interval}/${dstr(now)}/${dstr(new Date(now.getTime() - cfg.days * 86400000))}`);
+  }
+  const candles = data && data.candles;
+  if (!candles || candles.length < 2) return null;
+  const closes = candles.map(c => c[4]).reverse(); // Upstox returns newest first
+  const price = closes[closes.length - 1];
+  let dayPrev;
+  if (cfg.interval === 'day' || cfg.interval === 'week') {
+    dayPrev = closes[closes.length - 2];
+  } else {
+    /* intraday series — get yesterday's close from daily candles */
+    const d = await upstoxJSON(`/api/v2/historical-candle/${enc}/day/${dstr(new Date())}/${dstr(new Date(Date.now() - 6 * 86400000))}`);
+    const dc = d && d.candles;
+    if (dc && dc.length) {
+      const newestIsToday = new Date(dc[0][0]).toDateString() === new Date().toDateString();
+      dayPrev = newestIsToday && dc.length > 1 ? dc[1][4] : dc[0][4];
+    } else dayPrev = closes[0];
+  }
+  return { price, closes, dayChg: ((price - dayPrev) / dayPrev) * 100, src: 'upstox' };
+}
+
 function CompareChart({ portfolio, benchmark, height = 230, period = '1M' }) {
   const [hover, setHover] = useState(null);
   const wrapRef = useRef(null);
@@ -1574,7 +1643,11 @@ function App() {
         ...baseHoldings.map(h => ({ kind: 'quote', key: h.symbol, sym: ySymbol(h.symbol), range, interval })),
         ...MACRO_SYMBOLS.map(([id, sym]) => ({ kind: 'macro', key: id, sym, range: '1mo', interval: '1d' })),
       ];
-      const results = await mapLimit(tasks, 3, t => fetchChart(t.sym, t.range, t.interval));
+      const results = await mapLimit(tasks, 3, async t => {
+        if (t.kind === 'macro') return fetchChart(t.sym, t.range, t.interval);
+        const up = await fetchUpstoxChart(t.kind === 'nifty' ? 'NIFTY' : t.key, period);
+        return up || fetchChart(t.sym, t.range, t.interval);
+      });
       if (cancelled) return;
       const niftyRes = results[tasks.findIndex(t => t.kind === 'nifty')];
       const quoteRes = tasks.map((t, i) => t.kind === 'quote' ? [t.key, results[i]] : null).filter(Boolean);
@@ -1594,7 +1667,8 @@ function App() {
         if (id === 'vix') display = q.price.toFixed(1);
         macro[id] = { display, chg: q.dayChg, closes: q.closes };
       });
-      setLive({ quotes, nifty: niftyRes, macro, status: Object.keys(quotes).length ? 'live' : 'demo', updated: new Date() });
+      const source = Object.values(quotes).some(q => q.src === 'upstox') ? 'upstox' : 'yahoo';
+      setLive({ quotes, nifty: niftyRes, macro, source, status: Object.keys(quotes).length ? 'live' : 'demo', updated: new Date() });
     }
     load();
     const iv = setInterval(load, 120000);
@@ -1715,7 +1789,7 @@ function App() {
               }}></span>
               <span className="text-[10.5px] font-medium text-muted">
                 {live.status === 'live'
-                  ? <>Live · <span className="num">{live.updated && live.updated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span></>
+                  ? <>Live · {live.source === 'upstox' ? 'Upstox' : 'Yahoo'} · <span className="num">{live.updated && live.updated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span></>
                   : live.status === 'loading' ? 'Fetching live data…' : 'Demo data'}
               </span>
             </div>
