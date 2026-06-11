@@ -461,36 +461,108 @@ function TickerTape({ holdings, trends }) {
 
 /* =============================== CHARTS ==================================== */
 /* monochrome hero chart — white line, grey benchmark, like Fey */
-function CompareChart({ portfolio, benchmark, height = 230 }) {
-  const width = 820, pad = 16, h = height - pad * 2;
+const PERIOD_DAYS = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, 'YTD': 161, '1Y': 365, 'All': 730 };
+
+function CompareChart({ portfolio, benchmark, height = 230, period = '1M' }) {
+  const [hover, setHover] = useState(null);
+  const wrapRef = useRef(null);
+  const width = 820, padX = 24, padTop = 16, axisH = 24;
+  const h = height - padTop - axisH;
+  const innerW = width - padX * 2;
+  const n = portfolio.length;
+
   const norm = arr => arr.map(v => (v / arr[0]) * 100);
   const p = norm(portfolio), b = norm(benchmark);
   const all = [...p, ...b];
   const min = Math.min(...all), max = Math.max(...all);
   const range = (max - min) || 1;
-  const y = v => pad + (h - ((v - min) / range) * h);
-  const toLine = arr => {
-    const stepX = width / (arr.length - 1);
-    return arr.map((v, i) => (i === 0 ? 'M' : 'L') + (i * stepX).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
-  };
+  const x = i => padX + (i / (n - 1)) * innerW;
+  const y = v => padTop + (h - ((v - min) / range) * h);
+  const toLine = arr => arr.map((v, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
   const pLine = toLine(p), bLine = toLine(b);
-  const pArea = `${pLine} L ${width},${height} L 0,${height} Z`;
-  const lastPY = y(p[p.length - 1]);
+  const pArea = `${pLine} L ${x(n - 1)},${padTop + h} L ${padX},${padTop + h} Z`;
+
+  /* x-axis: dates spread across the chosen period */
+  const totalDays = PERIOD_DAYS[period] || 30;
+  const dateAt = i => new Date(TODAY.getTime() - totalDays * 86400000 * (1 - i / (n - 1)));
+  const fmtDate = (d, long) => totalDays <= 7
+    ? d.toLocaleDateString('en-IN', { weekday: 'short', ...(long ? { day: 'numeric', month: 'short' } : {}) })
+    : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(long || totalDays > 365 ? { year: totalDays > 365 ? '2-digit' : undefined } : {}) });
+  const tickIdx = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * (n - 1)));
+
+  const onMove = e => {
+    const rect = wrapRef.current.getBoundingClientRect();
+    const frac = (e.clientX - rect.left) / rect.width;
+    const svgX = frac * width;
+    const i = Math.round(((svgX - padX) / innerW) * (n - 1));
+    setHover(Math.max(0, Math.min(n - 1, i)));
+  };
+
+  const hv = hover !== null ? {
+    i: hover,
+    date: dateAt(hover),
+    value: portfolio[hover],
+    pPct: p[hover] - 100,
+    bPct: b[hover] - 100,
+  } : null;
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height }}>
-      <defs>
-        <linearGradient id="hero-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--chart-line)" stopOpacity="0.08" />
-          <stop offset="100%" stopColor="var(--chart-line)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={bLine} fill="none" stroke="var(--chart-grey)" strokeWidth="1.2" strokeDasharray="2 5" className="fade-in-slow" />
-      <text x={width - 8} y={y(b[b.length - 1]) - 8} textAnchor="end" fontSize="9.5" fill="var(--text-faint)" fontFamily="JetBrains Mono, monospace">NIFTY 50</text>
-      <path d={pArea} fill="url(#hero-grad)" stroke="none" className="fade-in-slow" />
-      <path d={pLine} fill="none" stroke="var(--chart-line)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="draw-line" />
-      <circle cx={width} cy={lastPY} r="3" fill="var(--chart-line)" />
-      <circle cx={width} cy={lastPY} r="8" fill="var(--chart-line)" opacity="0.12" />
-    </svg>
+    <div ref={wrapRef} className="relative w-full" style={{ height }}
+      onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-full">
+        <defs>
+          <linearGradient id="hero-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-line)" stopOpacity="0.08" />
+            <stop offset="100%" stopColor="var(--chart-line)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* x-axis */}
+        <line x1={padX} x2={width - padX} y1={padTop + h} y2={padTop + h} stroke="var(--border)" strokeWidth="1" />
+        {tickIdx.map((ti, j) => (
+          <text key={j} x={x(ti)} y={height - 7}
+            textAnchor={j === 0 ? 'start' : j === tickIdx.length - 1 ? 'end' : 'middle'}
+            fontSize="9" fill="var(--text-faint)" fontFamily="JetBrains Mono, monospace">
+            {fmtDate(dateAt(ti))}
+          </text>
+        ))}
+
+        <path d={bLine} fill="none" stroke="var(--chart-grey)" strokeWidth="1.2" strokeDasharray="2 5" className="fade-in-slow" />
+        <text x={width - padX - 4} y={y(b[n - 1]) - 8} textAnchor="end" fontSize="9.5" fill="var(--text-faint)" fontFamily="JetBrains Mono, monospace">NIFTY 50</text>
+        <path d={pArea} fill="url(#hero-grad)" stroke="none" className="fade-in-slow" />
+        <path d={pLine} fill="none" stroke="var(--chart-line)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="draw-line" />
+
+        {/* crosshair */}
+        {hv ? (
+          <g>
+            <line x1={x(hv.i)} x2={x(hv.i)} y1={padTop} y2={padTop + h} stroke="var(--border-strong)" strokeWidth="1" />
+            <circle cx={x(hv.i)} cy={y(b[hv.i])} r="3" fill="var(--chart-grey)" stroke="var(--surface)" strokeWidth="1.5" />
+            <circle cx={x(hv.i)} cy={y(p[hv.i])} r="3.5" fill="var(--chart-line)" stroke="var(--surface)" strokeWidth="1.5" />
+          </g>
+        ) : (
+          <g>
+            <circle cx={x(n - 1)} cy={y(p[n - 1])} r="3" fill="var(--chart-line)" />
+            <circle cx={x(n - 1)} cy={y(p[n - 1])} r="8" fill="var(--chart-line)" opacity="0.12" />
+          </g>
+        )}
+      </svg>
+
+      {/* tooltip */}
+      {hv && (
+        <div className="absolute pointer-events-none z-10 rounded-lg px-3 py-2 shadow-xl"
+          style={{
+            left: `${(x(hv.i) / width) * 100}%`, top: 6,
+            transform: hv.i > n / 2 ? 'translateX(calc(-100% - 10px))' : 'translateX(10px)',
+            background: 'var(--elevated)', border: '1px solid var(--border-strong)',
+          }}>
+          <p className="text-[9.5px] num text-faint whitespace-nowrap">{fmtDate(hv.date, true)}</p>
+          <p className="text-[12px] num font-medium whitespace-nowrap mt-1">{fmtINR(Math.round(hv.value))}
+            <span className="ml-1.5 text-[10px]" style={{ color: hv.pPct >= 0 ? 'var(--up)' : 'var(--down)' }}>{hv.pPct >= 0 ? '+' : ''}{hv.pPct.toFixed(1)}%</span>
+          </p>
+          <p className="text-[9.5px] num text-faint whitespace-nowrap mt-0.5">NIFTY 50 <span style={{ color: hv.bPct >= 0 ? 'var(--up)' : 'var(--down)' }}>{hv.bPct >= 0 ? '+' : ''}{hv.bPct.toFixed(1)}%</span></p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1497,7 +1569,7 @@ function App() {
                   </div>
                 </div>
                 <div className="mt-3 flex-1">
-                  <CompareChart key={period} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={252} />
+                  <CompareChart key={period} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={252} period={period} />
                 </div>
                 <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: '1px solid var(--border)' }}>
                   <div className="flex items-center gap-1">
