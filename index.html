@@ -463,6 +463,52 @@ function TickerTape({ holdings, trends }) {
 /* monochrome hero chart — white line, grey benchmark, like Fey */
 const PERIOD_DAYS = { '1D': 1, '1W': 7, '1M': 30, '3M': 90, 'YTD': 161, '1Y': 365, 'All': 730 };
 
+/* ========================== LIVE DATA (Yahoo Finance) ====================== */
+/* free, unofficial; fetched via public CORS proxies with demo-data fallback */
+const PERIOD_API = {
+  '1D': { range: '1d', interval: '5m' },
+  '1W': { range: '5d', interval: '30m' },
+  '1M': { range: '1mo', interval: '1d' },
+  '3M': { range: '3mo', interval: '1d' },
+  'YTD': { range: 'ytd', interval: '1d' },
+  '1Y': { range: '1y', interval: '1d' },
+  'All': { range: '2y', interval: '1wk' },
+};
+const PROXIES = [
+  u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+async function fetchWithProxy(url) {
+  for (const wrap of PROXIES) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 9000);
+      const res = await fetch(wrap(url), { signal: ctrl.signal });
+      clearTimeout(t);
+      if (!res.ok) continue;
+      return await res.json();
+    } catch (e) { /* try next proxy */ }
+  }
+  return null;
+}
+async function fetchChart(sym, range, interval) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}`;
+  const j = await fetchWithProxy(url);
+  const r = j && j.chart && j.chart.result && j.chart.result[0];
+  if (!r) return null;
+  const closes = ((r.indicators && r.indicators.quote && r.indicators.quote[0] && r.indicators.quote[0].close) || []).filter(v => v != null);
+  if (closes.length < 2) return null;
+  const price = (r.meta && r.meta.regularMarketPrice) || closes[closes.length - 1];
+  const intraday = /m$/.test(interval);
+  const dayPrev = intraday
+    ? ((r.meta && (r.meta.chartPreviousClose || r.meta.previousClose)) || closes[0])
+    : closes[closes.length - 2];
+  return { price, closes, dayChg: ((price - dayPrev) / dayPrev) * 100 };
+}
+const ySymbol = sym => sym.replace(/[^A-Z0-9-]/g, '') + '.NS';
+const MACRO_SYMBOLS = [['usdinr', 'INR=X'], ['gold', 'GC=F'], ['silver', 'SI=F'], ['crude', 'BZ=F'], ['vix', '^INDIAVIX']];
+const OZ_GRAMS = 31.1035;
+
 function CompareChart({ portfolio, benchmark, height = 230, period = '1M' }) {
   const [hover, setHover] = useState(null);
   const wrapRef = useRef(null);
@@ -583,11 +629,16 @@ function Sparkline({ data, id, width = 96, height = 28, mono = true, positive = 
 
 /* ========================= MARKET INFLUENCES =============================== */
 /* macro tiles + FII/DII flows — the forces behind today's mood */
-function MarketPulse() {
+function MarketPulse({ liveMacro = {} }) {
+  /* merge live values over the demo defaults; notes stay curated */
+  const MERGED = MARKET_INFLUENCES.map(m => {
+    const q = liveMacro[m.id];
+    return q ? { ...m, value: q.display || m.value, chg: q.chg, closes: q.closes, unit: q.display ? (m.id === 'gold' ? '/10g' : m.id === 'silver' ? '/kg' : '') : m.unit } : m;
+  });
   const maxFlow = Math.max(...FLOWS.fii.week.map(Math.abs), ...FLOWS.dii.week.map(Math.abs));
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-  const macro = MARKET_INFLUENCES.filter(m => m.id !== 'vix');
-  const vix = MARKET_INFLUENCES.find(m => m.id === 'vix');
+  const macro = MERGED.filter(m => m.id !== 'vix');
+  const vix = MERGED.find(m => m.id === 'vix');
 
   const FlowColumn = ({ label, flow, desc }) => (
     <div className="flex-1 min-w-[150px]">
@@ -624,7 +675,7 @@ function MarketPulse() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-6">
           {macro.map((m, i) => {
             const base = parseFloat(m.value.replace(/[^0-9.]/g, '')) || 100;
-            const series = genTrend('macro-' + m.id, base, 22, m.chg >= 0);
+            const series = (m.closes && m.closes.length > 2) ? m.closes : genTrend('macro-' + m.id, base, 22, m.chg >= 0);
             return (
               <div key={m.id} className="flex flex-col px-6 first:pl-0 lg:last:pr-0"
                 style={i > 0 ? { borderLeft: '1px solid var(--border)' } : {}}>
@@ -1490,16 +1541,56 @@ function AddHoldingModal({ onClose, onAdd }) {
 function App() {
   const [theme, setTheme] = useTheme();
   const [investorMode, setInvestorMode] = useState(() => localStorage.getItem('holdr-mode') || 'longterm');
-  const [holdings, setHoldings] = useState(DEMO_HOLDINGS);
+  const [baseHoldings, setBaseHoldings] = useState(DEMO_HOLDINGS);
   const [active, setActive] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [tab, setTab] = useState('today');
   const [filter, setFilter] = useState('all');
   const [toast, setToast] = useState(null);
   const [period, setPeriod] = useState(investorMode === 'active' ? '1W' : '1Y');
+  const [live, setLive] = useState({ quotes: {}, nifty: null, macro: {}, status: 'loading', updated: null });
 
   useEffect(() => { localStorage.setItem('holdr-mode', investorMode); }, [investorMode]);
   const flash = msg => { setToast(msg); setTimeout(() => setToast(null), 2600); };
+
+  /* live quotes: holdings + NIFTY per selected period, macro daily; demo fallback */
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const { range, interval } = PERIOD_API[period] || PERIOD_API['1M'];
+      const [niftyRes, quoteRes, macroRes] = await Promise.all([
+        fetchChart('^NSEI', range, interval),
+        Promise.all(baseHoldings.map(async h => [h.symbol, await fetchChart(ySymbol(h.symbol), range, interval)])),
+        Promise.all(MACRO_SYMBOLS.map(async ([id, sym]) => [id, await fetchChart(sym, '1mo', '1d')])),
+      ]);
+      if (cancelled) return;
+      const quotes = {};
+      quoteRes.forEach(([s, q]) => { if (q) quotes[s] = q; });
+      const inrQ = macroRes.find(([id]) => id === 'usdinr');
+      const inr = inrQ && inrQ[1] ? inrQ[1].price : null;
+      const macro = {};
+      macroRes.forEach(([id, q]) => {
+        if (!q) return;
+        let display = null;
+        if (id === 'usdinr') display = '₹' + q.price.toFixed(2);
+        if (id === 'gold' && inr) display = '₹' + Math.round(q.price * inr / OZ_GRAMS * 10).toLocaleString('en-IN');
+        if (id === 'silver' && inr) display = '₹' + Math.round(q.price * inr / OZ_GRAMS * 1000).toLocaleString('en-IN');
+        if (id === 'crude') display = '$' + q.price.toFixed(1);
+        if (id === 'vix') display = q.price.toFixed(1);
+        macro[id] = { display, chg: q.dayChg, closes: q.closes };
+      });
+      setLive({ quotes, nifty: niftyRes, macro, status: Object.keys(quotes).length ? 'live' : 'demo', updated: new Date() });
+    }
+    load();
+    const iv = setInterval(load, 120000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [period, baseHoldings]);
+
+  /* holdings with live LTP when available */
+  const holdings = useMemo(() => baseHoldings.map(h => {
+    const q = live.quotes[h.symbol];
+    return q ? { ...h, ltp: q.price } : h;
+  }), [baseHoldings, live.quotes]);
 
   const setMode = m => {
     setInvestorMode(m);
@@ -1509,12 +1600,12 @@ function App() {
 
   const handleAdd = entry => {
     if (entry === 'demo-batch') {
-      const fresh = DEMO_HOLDINGS.filter(h => !holdings.some(x => x.id === h.id));
+      const fresh = DEMO_HOLDINGS.filter(h => !baseHoldings.some(x => x.id === h.id));
       if (fresh.length === 0) { flash('Sample portfolio is already loaded'); return; }
-      setHoldings(prev => [...prev, ...fresh]);
+      setBaseHoldings(prev => [...prev, ...fresh]);
       flash(`Imported ${fresh.length} holdings from your file`);
     } else {
-      setHoldings(prev => [entry, ...prev.filter(h => h.id !== entry.id)]);
+      setBaseHoldings(prev => [entry, ...prev.filter(h => h.id !== entry.id)]);
       flash(`${entry.symbol} added to your portfolio`);
     }
   };
@@ -1532,16 +1623,29 @@ function App() {
   const trends = useMemo(() => {
     const map = {};
     holdings.forEach(h => {
+      const q = live.quotes[h.symbol];
       map[h.id] = {
-        series: genTrend(h.id + period, h.ltp, 26, h.ltp >= h.avgPrice),
-        dayChange: ((seedRandom(seedFromString(h.id + 'day'))() * 5 - 2.5) + (h.sentiment === 'positive' ? 0.6 : h.sentiment === 'negative' ? -0.6 : 0)),
+        series: q && q.closes.length > 2 ? q.closes : genTrend(h.id + period, h.ltp, 26, h.ltp >= h.avgPrice),
+        dayChange: q ? q.dayChg : ((seedRandom(seedFromString(h.id + 'day'))() * 5 - 2.5) + (h.sentiment === 'positive' ? 0.6 : h.sentiment === 'negative' ? -0.6 : 0)),
       };
     });
     return map;
-  }, [holdings, period]);
+  }, [holdings, period, live.quotes]);
 
-  const portfolioTrend = useMemo(() => genTrend('portfolio-' + period + holdings.length, totals.current, 34, totals.pnl >= 0), [totals.current, totals.pnl, holdings.length, period]);
-  const benchmarkTrend = useMemo(() => genTrend('nifty-' + period, 100, 34, true), [period]);
+  /* portfolio value series: sum of qty × live closes when every holding has data */
+  const portfolioTrend = useMemo(() => {
+    const series = holdings.map(h => live.quotes[h.symbol] && live.quotes[h.symbol].closes);
+    if (series.length && series.every(s => s && s.length > 2)) {
+      const L = Math.min(...series.map(s => s.length));
+      return Array.from({ length: L }, (_, i) =>
+        holdings.reduce((sum, h, hi) => sum + h.qty * series[hi][series[hi].length - L + i], 0));
+    }
+    return genTrend('portfolio-' + period + holdings.length, totals.current, 34, totals.pnl >= 0);
+  }, [holdings, live.quotes, totals.current, totals.pnl, period]);
+
+  const benchmarkTrend = useMemo(() =>
+    (live.nifty && live.nifty.closes.length > 2) ? live.nifty.closes : genTrend('nifty-' + period, 100, 34, true),
+  [live.nifty, period]);
 
   const filtered = useMemo(() => {
     let list = holdings.filter(h => filter === 'all' ? true : h.action === filter);
@@ -1590,8 +1694,15 @@ function App() {
               ))}
             </div>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full surface">
-              <span className="w-1 h-1 rounded-full pulse-dot" style={{ background: 'var(--up)', color: 'var(--up)' }}></span>
-              <span className="text-[10.5px] font-medium text-muted">Markets are open</span>
+              <span className="w-1 h-1 rounded-full pulse-dot" style={{
+                background: live.status === 'live' ? 'var(--up)' : live.status === 'loading' ? 'var(--warn)' : 'var(--text-faint)',
+                color: live.status === 'live' ? 'var(--up)' : live.status === 'loading' ? 'var(--warn)' : 'var(--text-faint)',
+              }}></span>
+              <span className="text-[10.5px] font-medium text-muted">
+                {live.status === 'live'
+                  ? <>Live · <span className="num">{live.updated && live.updated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span></>
+                  : live.status === 'loading' ? 'Fetching live data…' : 'Demo data'}
+              </span>
             </div>
           </div>
         </div>
@@ -1632,7 +1743,7 @@ function App() {
                   </div>
                 </div>
                 <div className="mt-3 flex-1">
-                  <CompareChart key={period} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={196} period={period} />
+                  <CompareChart key={period + '-' + live.status} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={196} period={period} />
                 </div>
                 <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: '1px solid var(--border)' }}>
                   <div className="flex items-center gap-1">
@@ -1666,7 +1777,7 @@ function App() {
             {/* ③ the market around you — context after your own money */}
             <section className="mt-8">
               <p className="text-[10px] uppercase tracking-[0.14em] text-faint font-semibold mb-3">The market around you</p>
-              <MarketPulse />
+              <MarketPulse liveMacro={live.macro} />
             </section>
           </div>
         )}
