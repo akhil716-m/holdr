@@ -321,15 +321,20 @@ const RADAR = [
 /* macro forces that set market mood — shown on Today */
 const MARKET_INFLUENCES = [
   { id: 'usdinr', label: 'USD / INR', value: '₹83.42', chg: +0.14, invert: true,
-    note: 'Weaker rupee lifts IT exporters, hurts importers' },
+    note: 'Weaker rupee lifts IT exporters, hurts importers',
+    summary: 'How many rupees one US dollar buys. A rising line means the rupee is weakening — good for exporters who earn in dollars (TCS, Infosys), a headwind for companies that import raw materials or fuel.' },
   { id: 'gold', label: 'Gold', value: '₹72,840', unit: '/10g', chg: +0.42, invert: true,
-    note: 'Risk-off money moving to safety' },
+    note: 'Risk-off money moving to safety',
+    summary: 'Gold price per 10 grams in rupees. When investors get nervous about equities, money rotates into gold as a safe haven — so a sharply rising line often signals caution building in the broader market.' },
   { id: 'silver', label: 'Silver', value: '₹91,250', unit: '/kg', chg: -0.61, invert: true,
-    note: 'Industrial demand cooling' },
+    note: 'Industrial demand cooling',
+    summary: 'Silver price per kilogram in rupees. Silver is both a safe haven and an industrial metal (solar, electronics), so its trend reflects a mix of investor caution and real factory demand.' },
   { id: 'crude', label: 'Brent crude', value: '$68.4', chg: -1.18, invert: true,
-    note: 'Cheaper oil eases inflation — good for India' },
+    note: 'Cheaper oil eases inflation — good for India',
+    summary: 'Global oil price per barrel in dollars. India imports most of its oil, so a falling line eases inflation and helps the rupee — broadly positive for Indian equities; a spike does the opposite.' },
   { id: 'vix', label: 'India VIX', value: '13.2', chg: -3.1, invert: true,
-    note: 'Fear gauge — falling VIX means calmer markets' },
+    note: 'Fear gauge — falling VIX means calmer markets',
+    summary: 'The market\'s expected volatility over the next month — the "fear gauge". Below ~15 suggests calm, complacent markets; spikes above ~20 signal stress and sharp swings ahead.' },
 ];
 
 /* institutional flows — who's buying, who's selling (₹ crore, net) */
@@ -751,7 +756,9 @@ function Sparkline({ data, id, width = 96, height = 28, mono = true, positive = 
 function LineChart({ data, period, fmt, height = 150, accent = 'var(--chart-line)' }) {
   const [hover, setHover] = useState(null);
   const wrapRef = useRef(null);
-  const width = 820, padX = 24, padTop = 14, axisH = 22;
+  /* padX = 0 so the plot edges line up with the card content (tiles, title) —
+     the viewBox is stretched, which would inflate any nonzero inset */
+  const width = 820, padX = 0, padTop = 14, axisH = 22;
   const h = height - padTop - axisH;
   const innerW = width - padX * 2;
   const n = data.length;
@@ -780,7 +787,7 @@ function LineChart({ data, period, fmt, height = 150, accent = 'var(--chart-line
 
   return (
     <div ref={wrapRef} className="relative w-full" style={{ height }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-full">
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-full" style={{ overflow: 'visible' }}>
         <defs>
           <linearGradient id="line-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={col} stopOpacity="0.12" />
@@ -905,7 +912,14 @@ function MacroExplorer({ macro, inr }) {
         <div className="mt-3">
           <LineChart key={key} data={series} period={period} fmt={macroFmt(sel)} accent="auto" height={160} />
         </div>
-        <p className="text-[11px] text-faint leading-[1.6] mt-2">{cur.note}</p>
+        {/* summary write-up */}
+        <div className="mt-4 rounded-xl px-4 py-3 surface-2">
+          <div className="flex items-center gap-2 mb-1.5">
+            <svg width="12" height="12" viewBox="0 0 15 15" fill="none" className="text-faint shrink-0"><circle cx="7.5" cy="7.5" r="6" stroke="currentColor"/><path d="M7.5 6.5v4M7.5 4.5v.5" stroke="currentColor" strokeLinecap="round"/></svg>
+            <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">What you're looking at</p>
+          </div>
+          <p className="text-[11.5px] text-muted leading-[1.65]">{cur.summary || cur.note}</p>
+        </div>
       </div>
     </div>
   );
