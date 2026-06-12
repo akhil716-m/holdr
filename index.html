@@ -747,8 +747,170 @@ function Sparkline({ data, id, width = 96, height = 28, mono = true, positive = 
   );
 }
 
+/* single-series interactive line chart — hover crosshair, x-axis, tooltip */
+function LineChart({ data, period, fmt, height = 150, accent = 'var(--chart-line)' }) {
+  const [hover, setHover] = useState(null);
+  const wrapRef = useRef(null);
+  const width = 820, padX = 24, padTop = 14, axisH = 22;
+  const h = height - padTop - axisH;
+  const innerW = width - padX * 2;
+  const n = data.length;
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = (max - min) || 1;
+  const x = i => padX + (i / (n - 1)) * innerW;
+  const y = v => padTop + (h - ((v - min) / range) * h);
+  const line = data.map((v, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+  const area = `${line} L ${x(n - 1)},${padTop + h} L ${padX},${padTop + h} Z`;
+  const up = data[n - 1] >= data[0];
+  const col = accent === 'auto' ? (up ? 'var(--up)' : 'var(--down)') : accent;
+
+  const totalDays = PERIOD_DAYS[period] || 30;
+  const dateAt = i => new Date(TODAY.getTime() - totalDays * 86400000 * (1 - i / (n - 1)));
+  const fmtDate = d => totalDays <= 7
+    ? d.toLocaleDateString('en-IN', { weekday: 'short' })
+    : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(totalDays > 365 ? { year: '2-digit' } : {}) });
+  const tickIdx = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * (n - 1)));
+
+  const onMove = e => {
+    const rect = wrapRef.current.getBoundingClientRect();
+    const i = Math.round((((e.clientX - rect.left) / rect.width * width) - padX) / innerW * (n - 1));
+    setHover(Math.max(0, Math.min(n - 1, i)));
+  };
+  const hv = hover !== null ? hover : null;
+
+  return (
+    <div ref={wrapRef} className="relative w-full" style={{ height }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-full">
+        <defs>
+          <linearGradient id="line-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={col} stopOpacity="0.12" />
+            <stop offset="100%" stopColor={col} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <line x1={padX} x2={width - padX} y1={padTop + h} y2={padTop + h} stroke="var(--border)" strokeWidth="1" />
+        {tickIdx.map((ti, j) => (
+          <text key={j} x={x(ti)} y={height - 6} textAnchor={j === 0 ? 'start' : j === 4 ? 'end' : 'middle'}
+            fontSize="9" fill="var(--text-faint)" fontFamily="JetBrains Mono, monospace">{fmtDate(dateAt(ti))}</text>
+        ))}
+        <path d={area} fill="url(#line-grad)" stroke="none" className="fade-in-slow" />
+        <path d={line} fill="none" stroke={col} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="draw-line" />
+        {hv !== null ? (
+          <g>
+            <line x1={x(hv)} x2={x(hv)} y1={padTop} y2={padTop + h} stroke="var(--border-strong)" strokeWidth="1" />
+            <circle cx={x(hv)} cy={y(data[hv])} r="3.5" fill={col} stroke="var(--surface)" strokeWidth="1.5" />
+          </g>
+        ) : (
+          <circle cx={x(n - 1)} cy={y(data[n - 1])} r="3" fill={col} />
+        )}
+      </svg>
+      {hv !== null && (
+        <div className="absolute pointer-events-none z-10 rounded-lg px-2.5 py-1.5 shadow-xl"
+          style={{ left: `${(x(hv) / width) * 100}%`, top: 2,
+            transform: hv > n / 2 ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)',
+            background: 'var(--elevated)', border: '1px solid var(--border-strong)' }}>
+          <p className="text-[9px] num text-faint whitespace-nowrap">{fmtDate(dateAt(hv))}</p>
+          <p className="text-[12px] num font-medium whitespace-nowrap mt-0.5">{fmt(data[hv])}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* fetch a macro instrument's series at a period, converted to display units */
+async function fetchMacroSeries(id, period, inr) {
+  const sym = (MACRO_SYMBOLS.find(([k]) => k === id) || [])[1];
+  if (!sym) return null;
+  const { range, interval } = PERIOD_API[period] || PERIOD_API['1M'];
+  const q = await fetchChart(sym, range, interval);
+  if (!q) return null;
+  const conv = id === 'gold' ? v => v * inr / OZ_GRAMS * 10
+    : id === 'silver' ? v => v * inr / OZ_GRAMS * 1000
+    : v => v;
+  return { closes: q.closes.map(conv), price: conv(q.price), chg: q.dayChg };
+}
+const macroFmt = id => v =>
+  id === 'usdinr' ? '₹' + v.toFixed(2)
+  : id === 'gold' ? '₹' + Math.round(v).toLocaleString('en-IN') + '/10g'
+  : id === 'silver' ? '₹' + Math.round(v).toLocaleString('en-IN') + '/kg'
+  : id === 'crude' ? '$' + v.toFixed(1)
+  : v.toFixed(1);
+
 /* ========================= MARKET INFLUENCES =============================== */
 /* macro tiles + FII/DII flows — the forces behind today's mood */
+function MacroExplorer({ macro, inr }) {
+  const [sel, setSel] = useState('gold');
+  const [period, setPeriod] = useState('1M');
+  const [cache, setCache] = useState({});
+  const periods = ['1W', '1M', '3M', '1Y', 'All'];
+  const cur = macro.find(m => m.id === sel) || macro[0];
+  const key = sel + period;
+
+  useEffect(() => {
+    if (cache[key]) return;
+    let cancelled = false;
+    fetchMacroSeries(sel, period, inr).then(r => {
+      if (!cancelled && r && r.closes.length > 2) setCache(c => ({ ...c, [key]: r.closes }));
+    });
+    return () => { cancelled = true; };
+  }, [key, inr]);
+
+  const series = cache[key]
+    || (cur.closes && cur.closes.length > 2 && period === '1M' ? cur.closes : null)
+    || genTrend('macro-' + sel, parseFloat(cur.value.replace(/[^0-9.]/g, '')) || 100, 26, cur.chg >= 0);
+  const periodChg = series.length > 1 ? ((series[series.length - 1] - series[0]) / series[0]) * 100 : 0;
+
+  return (
+    <div className="surface rounded-2xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <p className="font-medium text-[13px] tracking-tight">Currency & commodities</p>
+        <span className="text-[9.5px] num text-faint uppercase tracking-[0.08em]">what's setting the mood</span>
+      </div>
+
+      {/* selectable tiles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {macro.map(m => {
+          const on = m.id === sel;
+          return (
+            <button key={m.id} onClick={() => setSel(m.id)}
+              className="text-left rounded-xl px-3.5 py-3 transition-colors"
+              style={on ? { background: 'var(--surface-2)', border: '1px solid var(--border-strong)' } : { border: '1px solid var(--border)' }}>
+              <div className="flex items-center justify-between">
+                <p className="text-[9.5px] uppercase tracking-[0.1em] text-faint font-semibold">{m.label}</p>
+                <Delta value={m.chg} precision={2} />
+              </div>
+              <p className="text-[18px] num font-medium whitespace-nowrap mt-1.5">{m.value}<span className="text-[9.5px] text-faint ml-0.5">{m.unit || ''}</span></p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* detail chart for the selected instrument */}
+      <div className="mt-5">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-baseline gap-2.5">
+            <p className="text-[13px] font-medium">{cur.label}</p>
+            <p className="text-[16px] num font-medium">{cur.value}<span className="text-[9.5px] text-faint ml-0.5">{cur.unit || ''}</span></p>
+            <Delta value={periodChg} /> <span className="text-[10px] text-faint num">over {period}</span>
+          </div>
+          <div className="flex surface-2 rounded-lg p-0.5">
+            {periods.map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className="px-2.5 py-1 rounded-md text-[10.5px] num font-medium transition-colors"
+                style={period === p ? { background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border-strong)' } : { color: 'var(--text-faint)', border: '1px solid transparent' }}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-3">
+          <LineChart key={key} data={series} period={period} fmt={macroFmt(sel)} accent="auto" height={160} />
+        </div>
+        <p className="text-[11px] text-faint leading-[1.6] mt-2">{cur.note}</p>
+      </div>
+    </div>
+  );
+}
+
 function MarketPulse({ liveMacro = {}, liveFlows = null }) {
   const FLOWS = liveFlows || DEMO_FLOWS;
   /* merge live values over the demo defaults; notes stay curated */
@@ -760,6 +922,7 @@ function MarketPulse({ liveMacro = {}, liveFlows = null }) {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   const macro = MERGED.filter(m => m.id !== 'vix');
   const vix = MERGED.find(m => m.id === 'vix');
+  const inrRate = parseFloat((MERGED.find(m => m.id === 'usdinr')?.value || '83').replace(/[^0-9.]/g, '')) || 83;
 
   const FlowColumn = ({ label, flow, desc }) => (
     <div className="flex-1 min-w-[150px]">
@@ -787,36 +950,8 @@ function MarketPulse({ liveMacro = {}, liveFlows = null }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* currency & commodities — full width, four roomy tiles */}
-      <div className="surface rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-5">
-          <p className="font-medium text-[13px] tracking-tight">Currency & commodities</p>
-          <span className="text-[9.5px] num text-faint uppercase tracking-[0.08em]">what's setting the mood</span>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-6">
-          {macro.map((m, i) => {
-            const base = parseFloat(m.value.replace(/[^0-9.]/g, '')) || 100;
-            const series = (m.closes && m.closes.length > 2) ? m.closes : genTrend('macro-' + m.id, base, 22, m.chg >= 0);
-            return (
-              <div key={m.id} className="flex flex-col px-6 first:pl-0 lg:last:pr-0"
-                style={i > 0 ? { borderLeft: '1px solid var(--border)' } : {}}>
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">{m.label}</p>
-                  <Delta value={m.chg} precision={2} />
-                </div>
-                <p className="text-[22px] num font-medium whitespace-nowrap mt-2.5">{m.value}<span className="text-[10.5px] text-faint ml-0.5">{m.unit || ''}</span></p>
-                <div className="mt-4 min-h-[44px] flex items-center">
-                  <Sparkline data={series} id={'macro-' + m.id} width={210} height={42} />
-                </div>
-                <p className="text-[10.5px] text-faint leading-[1.55] mt-3.5">{m.note}</p>
-              </div>
-            );
-          })}
-        </div>
-        <p className="text-[11px] text-faint leading-[1.6] mt-5 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-          Mildly risk-off: gold is catching safe-haven money and the rupee is soft — but cheaper crude and a calmer VIX are cushioning the mood for Indian equities.
-        </p>
-      </div>
+      {/* currency & commodities — master/detail explorer */}
+      <MacroExplorer macro={macro} inr={inrRate} />
 
       {/* who's buying vs selling — full width */}
       <div className="surface rounded-2xl p-6">
