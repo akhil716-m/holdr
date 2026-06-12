@@ -92,6 +92,27 @@ def nse_get(path)
   end
 end
 
+# Yahoo Finance passthrough — server-side, no CORS proxy needed.
+# Used for macro (gold/silver/USD-INR/crude/VIX) and as a stock fallback.
+server.mount_proc '/yahoo' do |req, res|
+  res['Access-Control-Allow-Origin'] = '*'
+  res['Content-Type'] = 'application/json'
+  begin
+    sym = req.query['symbol'].to_s
+    range = req.query['range'] || '1mo'
+    interval = req.query['interval'] || '1d'
+    path = "/v8/finance/chart/#{URI.encode_www_form_component(sym)}?range=#{range}&interval=#{interval}"
+    out = Net::HTTP.start('query2.finance.yahoo.com', 443, use_ssl: true) do |http|
+      http.get(path, 'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
+    end
+    res.status = out.code.to_i
+    res.body = out.body
+  rescue => e
+    res.status = 502
+    res.body = { error: e.message }.to_json
+  end
+end
+
 server.mount_proc '/nse/fiidii' do |_req, res|
   res['Access-Control-Allow-Origin'] = '*'
   res['Content-Type'] = 'application/json'

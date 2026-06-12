@@ -530,9 +530,21 @@ async function mapLimit(items, limit, fn) {
   }));
   return out;
 }
+async function fetchYahooViaBridge(sym, range, interval) {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 7000);
+    const res = await fetch(`http://localhost:8765/yahoo?symbol=${encodeURIComponent(sym)}&range=${range}&interval=${interval}`, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j && j.chart ? j : null;
+  } catch (e) { return null; }
+}
 async function fetchChart(sym, range, interval) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}`;
-  const j = await fetchWithProxy(url);
+  // prefer our own bridge (reliable, server-side); fall back to public proxies
+  const j = (await fetchYahooViaBridge(sym, range, interval))
+    || await fetchWithProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}`);
   const r = j && j.chart && j.chart.result && j.chart.result[0];
   if (!r) return null;
   const closes = ((r.indicators && r.indicators.quote && r.indicators.quote[0] && r.indicators.quote[0].close) || []).filter(v => v != null);
