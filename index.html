@@ -33,13 +33,13 @@
     --glow-a: rgba(110,86,207,0.09); --glow-b: rgba(62,99,221,0.05); --glow-c: rgba(110,86,207,0.035);
   }
   .dark {
-    --bg: #060607; --surface: rgba(255,255,255,0.045); --surface-2: rgba(255,255,255,0.025); --elevated: rgba(48,48,55,0.55);
-    --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.14);
-    --glass-edge: rgba(255,255,255,0.12); --glass-shadow: rgba(0,0,0,0.35);
-    --glass-sheen: linear-gradient(155deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.015) 28%, rgba(255,255,255,0) 55%);
-    --glass-blur: blur(14px) saturate(130%) brightness(1.08);
-    --glass-blur-soft: blur(8px) saturate(115%) brightness(1.04);
-    --glass-blur-flat: blur(12px) saturate(100%) brightness(1.02);
+    --bg: #060607; --surface: rgba(255,255,255,0.07); --surface-2: rgba(255,255,255,0.045); --elevated: rgba(58,58,66,0.6);
+    --border: rgba(255,255,255,0.05); --border-strong: rgba(255,255,255,0.11);
+    --glass-edge: rgba(255,255,255,0.11); --glass-shadow: rgba(0,0,0,0.32);
+    --glass-sheen: linear-gradient(155deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.012) 28%, rgba(255,255,255,0) 55%);
+    --glass-blur: blur(13px) saturate(145%) brightness(1.06);
+    --glass-blur-soft: blur(7px) saturate(122%) brightness(1.03);
+    --glass-blur-flat: blur(9px) saturate(105%) brightness(1.02);
     --text: #F4F4F5; --text-muted: #8A8B94; --text-faint: #55565F;
     --chart-line: #ECECEE; --chart-grey: #45464E;
     --accent: #9B84F5; --accent-soft: rgba(155,132,245,0.10);
@@ -51,6 +51,13 @@
     --dot: rgba(255,255,255,0.07);
     --glow-a: rgba(110,86,207,0.22); --glow-b: rgba(62,99,221,0.11); --glow-c: rgba(110,86,207,0.14);
   }
+  /* dark mode (flat) — solid surfaces, no frost/blur */
+  .flat {
+    --surface: #131316; --surface-2: #1B1B1F; --elevated: #232328;
+    --glass-edge: rgba(255,255,255,0.05); --glass-shadow: rgba(0,0,0,0.45);
+    --glass-sheen: none;
+    --glass-blur: none; --glass-blur-soft: none; --glass-blur-flat: none;
+  }
   * { -webkit-font-smoothing: antialiased; }
   html { scrollbar-color: var(--border-strong) transparent; }
   body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); transition: background .3s ease, color .3s ease; font-size: 14px; }
@@ -59,8 +66,7 @@
     position: fixed; inset: 0; z-index: 0; pointer-events: none;
     background:
       radial-gradient(ellipse 85% 60% at 12% 8%, var(--glow-b), transparent 72%),
-      radial-gradient(ellipse 85% 60% at 88% 8%, var(--glow-b), transparent 72%),
-      radial-gradient(ellipse 75% 65% at 50% 100%, var(--glow-c), transparent 72%);
+      radial-gradient(ellipse 85% 60% at 88% 8%, var(--glow-b), transparent 72%);
   }
   /* faint grain so the blurred glass has texture to refract */
   .ambience::after {
@@ -82,6 +88,8 @@
   }
   /* flat glass — no saturation boost, so it doesn't pull in the ambient glow color */
   .glass-flat { backdrop-filter: var(--glass-blur-flat) !important; -webkit-backdrop-filter: var(--glass-blur-flat) !important; }
+  /* nested panel inside an already-blurred surface — no extra backdrop-filter, so it doesn't double-blur/grey out */
+  .inset-panel { background: var(--surface-2); border: 1px solid var(--border); backdrop-filter: none; -webkit-backdrop-filter: none; }
   .glass-pop {
     background-image: var(--glass-sheen); background-color: var(--elevated); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
     box-shadow: inset 0 1px 0 0 var(--glass-edge), inset 1px 0 0 0 var(--glass-edge), 0 12px 32px -12px var(--glass-shadow);
@@ -450,10 +458,11 @@ function genTrend(seedStr, end, points = 26, biasUp = true) {
 }
 
 /* ================================ THEME ==================================== */
+/* two dark variants: 'glass' (default, frosted surfaces) and 'flat' (solid, no blur) */
 function useTheme() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('holdr-theme') || 'dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('holdr-theme') || 'glass');
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    document.documentElement.classList.toggle('flat', theme === 'flat');
     localStorage.setItem('holdr-theme', theme);
   }, [theme]);
   return [theme, setTheme];
@@ -721,8 +730,8 @@ function CompareChart({ portfolio, benchmark, height = 260, period = '1M' }) {
             <stop offset="55%" stopColor="var(--chart-line)" stopOpacity="0.07" />
             <stop offset="100%" stopColor="var(--chart-line)" stopOpacity="0" />
           </linearGradient>
-          <pattern id={`dots-${uid}`} width="13" height="13" patternUnits="userSpaceOnUse">
-            <circle cx="1.5" cy="1.5" r="1.1" fill="var(--dot)" />
+          <pattern id={`dots-${uid}`} width="9" height="9" patternUnits="userSpaceOnUse">
+            <circle cx="1.3" cy="1.3" r="0.9" fill="var(--dot)" />
           </pattern>
           <clipPath id={`area-clip-${uid}`}>
             <path d={pArea} />
@@ -837,8 +846,8 @@ function LineChart({ data, period, fmt, height = 190, accent = 'var(--chart-line
             <stop offset="55%" stopColor={col} stopOpacity="0.08" />
             <stop offset="100%" stopColor={col} stopOpacity="0" />
           </linearGradient>
-          <pattern id={`dots-${uid}`} width="13" height="13" patternUnits="userSpaceOnUse">
-            <circle cx="1.5" cy="1.5" r="1.1" fill="var(--dot)" />
+          <pattern id={`dots-${uid}`} width="9" height="9" patternUnits="userSpaceOnUse">
+            <circle cx="1.3" cy="1.3" r="0.9" fill="var(--dot)" />
           </pattern>
           <clipPath id={`area-clip-${uid}`}>
             <path d={area} />
@@ -964,7 +973,7 @@ function MacroExplorer({ macro, inr }) {
           <LineChart key={key} data={series} period={period} fmt={macroFmt(sel)} accent="auto" height={200} />
         </div>
         {/* summary write-up */}
-        <div className="mt-4 rounded-xl px-4 py-3 surface-2">
+        <div className="mt-4 rounded-xl px-4 py-3 inset-panel">
           <div className="flex items-center gap-2 mb-1.5">
             <svg width="12" height="12" viewBox="0 0 15 15" fill="none" className="text-faint shrink-0"><circle cx="7.5" cy="7.5" r="6" stroke="currentColor"/><path d="M7.5 6.5v4M7.5 4.5v.5" stroke="currentColor" strokeLinecap="round"/></svg>
             <p className="text-[10px] uppercase tracking-[0.1em] text-faint font-semibold">What you're looking at</p>
@@ -2271,9 +2280,9 @@ function App() {
           <Icon.plus />
           <span className="dock-label glass-pop">Add holding</span>
         </button>
-        <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="dock-btn">
-          {theme === 'dark' ? <Icon.sun /> : <Icon.moon />}
-          <span className="dock-label glass-pop">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+        <button onClick={() => setTheme(theme === 'glass' ? 'flat' : 'glass')} className="dock-btn">
+          {theme === 'glass' ? <Icon.moon /> : <Icon.sun />}
+          <span className="dock-label glass-pop">{theme === 'glass' ? 'Dark mode' : 'Glass mode'}</span>
         </button>
       </nav>
 
