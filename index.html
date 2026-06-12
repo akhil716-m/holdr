@@ -14,8 +14,13 @@
 </script>
 <style>
   :root {
-    --bg: #F7F7F7; --surface: #FFFFFF; --surface-2: #F1F1F2; --elevated: #FFFFFF;
-    --border: rgba(10,10,12,0.07); --border-strong: rgba(10,10,12,0.14);
+    --bg: #F7F7F7; --surface: rgba(255,255,255,0.6); --surface-2: rgba(10,10,18,0.04); --elevated: rgba(255,255,255,0.78);
+    --border: rgba(10,10,12,0.09); --border-strong: rgba(10,10,12,0.16);
+    --glass-edge: rgba(255,255,255,0.85); --glass-shadow: rgba(20,20,30,0.08);
+    --glass-sheen: linear-gradient(155deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.12) 28%, rgba(255,255,255,0) 55%);
+    --glass-blur: blur(28px) saturate(220%) brightness(1.06);
+    --glass-blur-soft: blur(16px) saturate(180%) brightness(1.03);
+    --glass-blur-flat: blur(20px) saturate(130%) brightness(1.02);
     --text: #111113; --text-muted: #6F7076; --text-faint: #A3A4AB;
     --chart-line: #1A1A1E; --chart-grey: #B9BAC2;
     --accent: #6E56CF; --accent-soft: rgba(110,86,207,0.08);
@@ -24,11 +29,17 @@
     --down: #D53A41; --down-soft: rgba(213,58,65,0.09);
     --warn: #B07116; --warn-soft: rgba(176,113,22,0.10);
     --ring: rgba(110,86,207,0.16);
-    --glow-a: rgba(110,86,207,0.05); --glow-b: rgba(62,99,221,0.04);
+    --dot: rgba(10,10,12,0.08);
+    --glow-a: rgba(110,86,207,0.09); --glow-b: rgba(62,99,221,0.07); --glow-c: rgba(213,58,65,0.04);
   }
   .dark {
-    --bg: #060607; --surface: #0E0E10; --surface-2: #151518; --elevated: #1A1A1E;
-    --border: rgba(255,255,255,0.06); --border-strong: rgba(255,255,255,0.12);
+    --bg: #060607; --surface: rgba(255,255,255,0.045); --surface-2: rgba(255,255,255,0.025); --elevated: rgba(48,48,55,0.55);
+    --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.14);
+    --glass-edge: rgba(255,255,255,0.12); --glass-shadow: rgba(0,0,0,0.35);
+    --glass-sheen: linear-gradient(155deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.015) 28%, rgba(255,255,255,0) 55%);
+    --glass-blur: blur(14px) saturate(130%) brightness(1.08);
+    --glass-blur-soft: blur(8px) saturate(115%) brightness(1.04);
+    --glass-blur-flat: blur(12px) saturate(100%) brightness(1.02);
     --text: #F4F4F5; --text-muted: #8A8B94; --text-faint: #55565F;
     --chart-line: #ECECEE; --chart-grey: #45464E;
     --accent: #9B84F5; --accent-soft: rgba(155,132,245,0.10);
@@ -37,22 +48,44 @@
     --down: #F87171; --down-soft: rgba(248,113,113,0.10);
     --warn: #FBBF24; --warn-soft: rgba(251,191,36,0.09);
     --ring: rgba(155,132,245,0.22);
-    --glow-a: rgba(110,86,207,0.13); --glow-b: rgba(50,30,90,0.18);
+    --dot: rgba(255,255,255,0.07);
+    --glow-a: rgba(110,86,207,0.22); --glow-b: rgba(62,99,221,0.16); --glow-c: rgba(50,30,90,0.28);
   }
   * { -webkit-font-smoothing: antialiased; }
   html { scrollbar-color: var(--border-strong) transparent; }
   body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); transition: background .3s ease, color .3s ease; font-size: 14px; }
-  /* ambient brand glow — Fey-style single soft bloom */
+  /* ambient brand glow — Fey-style soft blooms, seen through the glass surfaces */
   .ambience {
     position: fixed; inset: 0; z-index: 0; pointer-events: none;
     background:
-      radial-gradient(ellipse 55% 38% at 78% -6%, var(--glow-a), transparent 65%),
-      radial-gradient(ellipse 70% 45% at 18% -10%, var(--glow-b), transparent 70%);
+      radial-gradient(ellipse 70% 55% at 82% 0%, var(--glow-a), transparent 70%),
+      radial-gradient(ellipse 85% 60% at 12% 8%, var(--glow-b), transparent 72%),
+      radial-gradient(ellipse 75% 65% at 50% 100%, var(--glow-c), transparent 72%);
+  }
+  /* faint grain so the blurred glass has texture to refract */
+  .ambience::after {
+    content: ''; position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    opacity: 0.05; mix-blend-mode: overlay;
   }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
-  .surface { background: var(--surface); border: 1px solid var(--border); }
-  .surface-2 { background: var(--surface-2); border: 1px solid var(--border); }
+  .surface {
+    background-image: var(--glass-sheen); background-color: var(--surface); border: 1px solid var(--border);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: inset 0 1px 0 0 var(--glass-edge), inset 1px 0 0 0 var(--glass-edge),
+      inset 0 -1px 0 0 var(--glass-shadow), 0 16px 40px -18px var(--glass-shadow);
+  }
+  .surface-2 {
+    background-image: var(--glass-sheen); background-color: var(--surface-2); border: 1px solid var(--border);
+    backdrop-filter: var(--glass-blur-soft); -webkit-backdrop-filter: var(--glass-blur-soft);
+  }
+  /* flat glass — no saturation boost, so it doesn't pull in the ambient glow color */
+  .glass-flat { backdrop-filter: var(--glass-blur-flat) !important; -webkit-backdrop-filter: var(--glass-blur-flat) !important; }
+  .glass-pop {
+    background-image: var(--glass-sheen); background-color: var(--elevated); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: inset 0 1px 0 0 var(--glass-edge), inset 1px 0 0 0 var(--glass-edge), 0 12px 32px -12px var(--glass-shadow);
+  }
   .text-muted { color: var(--text-muted); }
   .text-faint { color: var(--text-faint); }
   .num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
@@ -90,7 +123,7 @@
   .dock-sep { width:1px; height:20px; background: var(--border-strong); margin: 0 5px; }
   .dock-label {
     position: absolute; bottom: 46px; left: 50%; transform: translateX(-50%);
-    background: var(--elevated); border: 1px solid var(--border); color: var(--text);
+    border: 1px solid var(--border); color: var(--text);
     font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; white-space: nowrap;
     opacity: 0; pointer-events: none; transition: opacity .12s ease;
   }
@@ -101,7 +134,7 @@
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useMemo, useRef, useEffect } = React;
+const { useState, useMemo, useRef, useEffect, useId } = React;
 
 /* ================================ DATA ===================================== */
 const TODAY = new Date('2026-06-10');
@@ -634,9 +667,10 @@ async function fetchUpstoxChart(symKey, period) {
   return { price, closes, dayChg: ((price - dayPrev) / dayPrev) * 100, src: 'upstox' };
 }
 
-function CompareChart({ portfolio, benchmark, height = 230, period = '1M' }) {
+function CompareChart({ portfolio, benchmark, height = 260, period = '1M' }) {
   const [hover, setHover] = useState(null);
   const wrapRef = useRef(null);
+  const uid = useId();
   const width = 820, padX = 24, padTop = 16, axisH = 24;
   const h = height - padTop - axisH;
   const innerW = width - padX * 2;
@@ -680,12 +714,19 @@ function CompareChart({ portfolio, benchmark, height = 230, period = '1M' }) {
   return (
     <div ref={wrapRef} className="relative w-full" style={{ height }}
       onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-full">
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="relative w-full h-full">
         <defs>
-          <linearGradient id="hero-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--chart-line)" stopOpacity="0.08" />
+          <linearGradient id={`hero-grad-${uid}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-line)" stopOpacity="0.30" />
+            <stop offset="55%" stopColor="var(--chart-line)" stopOpacity="0.07" />
             <stop offset="100%" stopColor="var(--chart-line)" stopOpacity="0" />
           </linearGradient>
+          <pattern id={`dots-${uid}`} width="13" height="13" patternUnits="userSpaceOnUse">
+            <circle cx="1.5" cy="1.5" r="1.1" fill="var(--dot)" />
+          </pattern>
+          <clipPath id={`area-clip-${uid}`}>
+            <path d={pArea} />
+          </clipPath>
         </defs>
 
         {/* x-axis */}
@@ -698,9 +739,10 @@ function CompareChart({ portfolio, benchmark, height = 230, period = '1M' }) {
           </text>
         ))}
 
+        <rect x={padX} y={padTop} width={innerW} height={h} fill={`url(#dots-${uid})`} clipPath={`url(#area-clip-${uid})`} className="fade-in-slow" />
         <path d={bLine} fill="none" stroke="var(--chart-grey)" strokeWidth="1.2" strokeDasharray="2 5" className="fade-in-slow" />
         <text x={width - padX - 4} y={y(b[n - 1]) - 8} textAnchor="end" fontSize="9.5" fill="var(--text-faint)" fontFamily="JetBrains Mono, monospace">NIFTY 50</text>
-        <path d={pArea} fill="url(#hero-grad)" stroke="none" className="fade-in-slow" />
+        <path d={pArea} fill={`url(#hero-grad-${uid})`} stroke="none" className="fade-in-slow" />
         <path d={pLine} fill="none" stroke="var(--chart-line)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="draw-line" />
 
         {/* crosshair */}
@@ -720,11 +762,11 @@ function CompareChart({ portfolio, benchmark, height = 230, period = '1M' }) {
 
       {/* tooltip */}
       {hv && (
-        <div className="absolute pointer-events-none z-10 rounded-lg px-3 py-2 shadow-xl"
+        <div className="absolute pointer-events-none z-10 rounded-lg px-3 py-2 shadow-xl glass-pop"
           style={{
             left: `${(x(hv.i) / width) * 100}%`, top: 6,
             transform: hv.i > n / 2 ? 'translateX(calc(-100% - 10px))' : 'translateX(10px)',
-            background: 'var(--elevated)', border: '1px solid var(--border-strong)',
+            border: '1px solid var(--border-strong)',
           }}>
           <p className="text-[9.5px] num text-faint whitespace-nowrap">{fmtDate(hv.date, true)}</p>
           <p className="text-[12px] num font-medium whitespace-nowrap mt-1">{fmtINR(Math.round(hv.value))}
@@ -753,9 +795,10 @@ function Sparkline({ data, id, width = 96, height = 28, mono = true, positive = 
 }
 
 /* single-series interactive line chart — hover crosshair, x-axis, tooltip */
-function LineChart({ data, period, fmt, height = 150, accent = 'var(--chart-line)' }) {
+function LineChart({ data, period, fmt, height = 190, accent = 'var(--chart-line)' }) {
   const [hover, setHover] = useState(null);
   const wrapRef = useRef(null);
+  const uid = useId();
   /* padX = 0 so the plot edges line up with the card content (tiles, title) —
      the viewBox is stretched, which would inflate any nonzero inset */
   const width = 820, padX = 0, padTop = 14, axisH = 22;
@@ -787,19 +830,27 @@ function LineChart({ data, period, fmt, height = 150, accent = 'var(--chart-line
 
   return (
     <div ref={wrapRef} className="relative w-full" style={{ height }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-full" style={{ overflow: 'visible' }}>
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="relative w-full h-full" style={{ overflow: 'visible' }}>
         <defs>
-          <linearGradient id="line-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={col} stopOpacity="0.12" />
+          <linearGradient id={`line-grad-${uid}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={col} stopOpacity="0.32" />
+            <stop offset="55%" stopColor={col} stopOpacity="0.08" />
             <stop offset="100%" stopColor={col} stopOpacity="0" />
           </linearGradient>
+          <pattern id={`dots-${uid}`} width="13" height="13" patternUnits="userSpaceOnUse">
+            <circle cx="1.5" cy="1.5" r="1.1" fill="var(--dot)" />
+          </pattern>
+          <clipPath id={`area-clip-${uid}`}>
+            <path d={area} />
+          </clipPath>
         </defs>
         <line x1={padX} x2={width - padX} y1={padTop + h} y2={padTop + h} stroke="var(--border)" strokeWidth="1" />
         {tickIdx.map((ti, j) => (
           <text key={j} x={x(ti)} y={height - 6} textAnchor={j === 0 ? 'start' : j === 4 ? 'end' : 'middle'}
             fontSize="9" fill="var(--text-faint)" fontFamily="JetBrains Mono, monospace">{fmtDate(dateAt(ti))}</text>
         ))}
-        <path d={area} fill="url(#line-grad)" stroke="none" className="fade-in-slow" />
+        <rect x={padX} y={padTop} width={innerW} height={h} fill={`url(#dots-${uid})`} clipPath={`url(#area-clip-${uid})`} className="fade-in-slow" />
+        <path d={area} fill={`url(#line-grad-${uid})`} stroke="none" className="fade-in-slow" />
         <path d={line} fill="none" stroke={col} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="draw-line" />
         {hv !== null ? (
           <g>
@@ -811,10 +862,10 @@ function LineChart({ data, period, fmt, height = 150, accent = 'var(--chart-line
         )}
       </svg>
       {hv !== null && (
-        <div className="absolute pointer-events-none z-10 rounded-lg px-2.5 py-1.5 shadow-xl"
+        <div className="absolute pointer-events-none z-10 rounded-lg px-2.5 py-1.5 shadow-xl glass-pop"
           style={{ left: `${(x(hv) / width) * 100}%`, top: 2,
             transform: hv > n / 2 ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)',
-            background: 'var(--elevated)', border: '1px solid var(--border-strong)' }}>
+            border: '1px solid var(--border-strong)' }}>
           <p className="text-[9px] num text-faint whitespace-nowrap">{fmtDate(dateAt(hv))}</p>
           <p className="text-[12px] num font-medium whitespace-nowrap mt-0.5">{fmt(data[hv])}</p>
         </div>
@@ -910,7 +961,7 @@ function MacroExplorer({ macro, inr }) {
           </div>
         </div>
         <div className="mt-3">
-          <LineChart key={key} data={series} period={period} fmt={macroFmt(sel)} accent="auto" height={160} />
+          <LineChart key={key} data={series} period={period} fmt={macroFmt(sel)} accent="auto" height={200} />
         </div>
         {/* summary write-up */}
         <div className="mt-4 rounded-xl px-4 py-3 surface-2">
@@ -1965,7 +2016,7 @@ function App() {
             <p className="font-medium tracking-tight text-[14px]">Holdr</p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="hidden md:flex surface rounded-full p-[3px]">
+            <div className="hidden md:flex surface glass-flat rounded-full p-[3px]">
               {[['longterm', 'Long-term'], ['active', 'Active']].map(([key, label]) => (
                 <button key={key} onClick={() => setMode(key)}
                   className="px-3 py-1 rounded-full text-[11px] font-medium transition-colors"
@@ -1974,7 +2025,7 @@ function App() {
                 </button>
               ))}
             </div>
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full surface">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full surface glass-flat">
               <span className="w-1 h-1 rounded-full pulse-dot" style={{
                 background: live.status === 'live' ? 'var(--up)' : live.status === 'loading' ? 'var(--warn)' : 'var(--text-faint)',
                 color: live.status === 'live' ? 'var(--up)' : live.status === 'loading' ? 'var(--warn)' : 'var(--text-faint)',
@@ -2024,7 +2075,7 @@ function App() {
                   </div>
                 </div>
                 <div className="mt-3 flex-1">
-                  <CompareChart key={period + '-' + live.status} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={196} period={period} />
+                  <CompareChart key={period + '-' + live.status} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={250} period={period} />
                 </div>
                 <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: '1px solid var(--border)' }}>
                   <div className="flex items-center gap-1">
@@ -2212,17 +2263,17 @@ function App() {
         {dockItems.map(([key, label, Ic]) => (
           <button key={key} onClick={() => setTab(key)} className={`dock-btn ${tab === key ? 'active' : ''}`}>
             <Ic />
-            <span className="dock-label">{label}</span>
+            <span className="dock-label glass-pop">{label}</span>
           </button>
         ))}
         <div className="dock-sep"></div>
         <button onClick={() => setShowAdd(true)} className="dock-btn">
           <Icon.plus />
-          <span className="dock-label">Add holding</span>
+          <span className="dock-label glass-pop">Add holding</span>
         </button>
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="dock-btn">
           {theme === 'dark' ? <Icon.sun /> : <Icon.moon />}
-          <span className="dock-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+          <span className="dock-label glass-pop">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
         </button>
       </nav>
 
