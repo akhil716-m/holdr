@@ -69,6 +69,43 @@ server.mount_proc '/ping' do |_req, res|
   res.body = { ok: true, authenticated: !token.nil? }.to_json
 end
 
+# NSE FII/DII daily activity — no auth, but NSE needs a cookie handshake.
+# Hit the homepage first to collect cookies, then call the data API.
+$nse_cookie = nil
+def nse_get(path)
+  hdr = {
+    'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    'Accept' => 'application/json, text/plain, */*',
+    'Accept-Language' => 'en-US,en;q=0.9',
+    'Referer' => 'https://www.nseindia.com/',
+  }
+  Net::HTTP.start('www.nseindia.com', 443, use_ssl: true) do |http|
+    unless $nse_cookie
+      home = http.get('/', hdr)
+      $nse_cookie = (home.get_fields('set-cookie') || []).map { |c| c.split(';').first }.join('; ')
+    end
+    res = http.get(path, hdr.merge('Cookie' => $nse_cookie))
+    if res.code.to_i == 401 || res.code.to_i == 403
+      $nse_cookie = nil # stale cookies — force re-handshake next call
+    end
+    res
+  end
+end
+
+server.mount_proc '/nse/fiidii' do |_req, res|
+  res['Access-Control-Allow-Origin'] = '*'
+  res['Content-Type'] = 'application/json'
+  begin
+    out = nse_get('/api/fiidiiTradeReact')
+    out = nse_get('/api/fiidiiTradeReact') if out.code.to_i >= 400 # one retry after re-handshake
+    res.status = out.code.to_i
+    res.body = out.body
+  rescue => e
+    res.status = 502
+    res.body = { error: e.message }.to_json
+  end
+end
+
 # Proxy: /api/<anything> -> https://api.upstox.com/<anything> with the token
 server.mount_proc '/api' do |req, res|
   res['Access-Control-Allow-Origin'] = '*'

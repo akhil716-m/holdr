@@ -333,10 +333,38 @@ const MARKET_INFLUENCES = [
 ];
 
 /* institutional flows — who's buying, who's selling (₹ crore, net) */
-const FLOWS = {
+const DEMO_FLOWS = {
   fii: { today: -1240, week: [-820, -1510, +340, -960, -1240] },
   dii: { today: +1890, week: [+1120, +1760, +890, +1430, +1890] },
 };
+
+/* fetch real FII/DII from NSE via the local bridge; accumulate a 5-day
+   history in localStorage so the weekly bars become real over time */
+async function fetchFlows() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 7000);
+    const res = await fetch('http://localhost:8765/nse/fiidii', { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const rows = await res.json();
+    const fii = rows.find(r => /FII/i.test(r.category));
+    const dii = rows.find(r => /DII/i.test(r.category));
+    if (!fii || !dii) return null;
+    const date = fii.date;
+    const fNet = Math.round(parseFloat(fii.netValue));
+    const dNet = Math.round(parseFloat(dii.netValue));
+    const hist = JSON.parse(localStorage.getItem('holdr-flows') || '{}');
+    hist[date] = { fii: fNet, dii: dNet };
+    const keep = Object.entries(hist).sort((a, b) => new Date(a[0]) - new Date(b[0])).slice(-5);
+    localStorage.setItem('holdr-flows', JSON.stringify(Object.fromEntries(keep)));
+    const pad = arr => arr.length >= 5 ? arr.slice(-5) : Array(5 - arr.length).fill(arr[0] ?? 0).concat(arr);
+    return {
+      fii: { today: fNet, week: pad(keep.map(([, v]) => v.fii)) },
+      dii: { today: dNet, week: pad(keep.map(([, v]) => v.dii)) },
+    };
+  } catch (e) { return null; }
+}
 
 const SENTIMENT_META = {
   positive: { label: 'Positive', tone: 'up' },
@@ -709,7 +737,8 @@ function Sparkline({ data, id, width = 96, height = 28, mono = true, positive = 
 
 /* ========================= MARKET INFLUENCES =============================== */
 /* macro tiles + FII/DII flows — the forces behind today's mood */
-function MarketPulse({ liveMacro = {} }) {
+function MarketPulse({ liveMacro = {}, liveFlows = null }) {
+  const FLOWS = liveFlows || DEMO_FLOWS;
   /* merge live values over the demo defaults; notes stay curated */
   const MERGED = MARKET_INFLUENCES.map(m => {
     const q = liveMacro[m.id];
@@ -1628,7 +1657,7 @@ function App() {
   const [filter, setFilter] = useState('all');
   const [toast, setToast] = useState(null);
   const [period, setPeriod] = useState(investorMode === 'active' ? '1W' : '1Y');
-  const [live, setLive] = useState({ quotes: {}, nifty: null, macro: {}, status: 'loading', updated: null });
+  const [live, setLive] = useState({ quotes: {}, nifty: null, macro: {}, flows: null, status: 'loading', updated: null });
 
   useEffect(() => { localStorage.setItem('holdr-mode', investorMode); }, [investorMode]);
   const flash = msg => { setToast(msg); setTimeout(() => setToast(null), 2600); };
@@ -1667,8 +1696,10 @@ function App() {
         if (id === 'vix') display = q.price.toFixed(1);
         macro[id] = { display, chg: q.dayChg, closes: q.closes };
       });
+      const flows = await fetchFlows();
+      if (cancelled) return;
       const source = Object.values(quotes).some(q => q.src === 'upstox') ? 'upstox' : 'yahoo';
-      setLive({ quotes, nifty: niftyRes, macro, source, status: Object.keys(quotes).length ? 'live' : 'demo', updated: new Date() });
+      setLive({ quotes, nifty: niftyRes, macro, flows, source, status: Object.keys(quotes).length ? 'live' : 'demo', updated: new Date() });
     }
     load();
     const iv = setInterval(load, 120000);
@@ -1866,7 +1897,7 @@ function App() {
             {/* ③ the market around you — context after your own money */}
             <section className="mt-8">
               <p className="text-[10px] uppercase tracking-[0.14em] text-faint font-semibold mb-3">The market around you</p>
-              <MarketPulse liveMacro={live.macro} />
+              <MarketPulse liveMacro={live.macro} liveFlows={live.flows} />
             </section>
           </div>
         )}
