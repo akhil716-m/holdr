@@ -30,7 +30,7 @@
     --warn: #B07116; --warn-soft: rgba(176,113,22,0.10);
     --ring: rgba(110,86,207,0.16);
     --dot: rgba(10,10,12,0.08);
-    --glow-a: rgba(110,86,207,0.09); --glow-b: rgba(62,99,221,0.07); --glow-c: rgba(213,58,65,0.04);
+    --glow-a: rgba(110,86,207,0.09); --glow-b: rgba(62,99,221,0.05); --glow-c: rgba(110,86,207,0.035);
   }
   .dark {
     --bg: #060607; --surface: rgba(255,255,255,0.045); --surface-2: rgba(255,255,255,0.025); --elevated: rgba(48,48,55,0.55);
@@ -49,7 +49,7 @@
     --warn: #FBBF24; --warn-soft: rgba(251,191,36,0.09);
     --ring: rgba(155,132,245,0.22);
     --dot: rgba(255,255,255,0.07);
-    --glow-a: rgba(110,86,207,0.22); --glow-b: rgba(62,99,221,0.16); --glow-c: rgba(50,30,90,0.28);
+    --glow-a: rgba(110,86,207,0.22); --glow-b: rgba(62,99,221,0.11); --glow-c: rgba(110,86,207,0.14);
   }
   * { -webkit-font-smoothing: antialiased; }
   html { scrollbar-color: var(--border-strong) transparent; }
@@ -58,8 +58,8 @@
   .ambience {
     position: fixed; inset: 0; z-index: 0; pointer-events: none;
     background:
-      radial-gradient(ellipse 70% 55% at 82% 0%, var(--glow-a), transparent 70%),
       radial-gradient(ellipse 85% 60% at 12% 8%, var(--glow-b), transparent 72%),
+      radial-gradient(ellipse 85% 60% at 88% 8%, var(--glow-b), transparent 72%),
       radial-gradient(ellipse 75% 65% at 50% 100%, var(--glow-c), transparent 72%);
   }
   /* faint grain so the blurred glass has texture to refract */
