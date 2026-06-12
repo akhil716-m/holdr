@@ -78,11 +78,11 @@ server.mount_proc '/api' do |req, res|
     res.status = 401
     res.body = { error: 'not_authenticated', hint: "open http://localhost:#{PORT}/login" }.to_json
   else
-    path = req.path.sub(%r{^/api}, '')
-    path += "?#{req.query_string}" if req.query_string && !req.query_string.empty?
-    uri = URI("https://api.upstox.com#{path}")
-    out = Net::HTTP.start(uri.host, 443, use_ssl: true) do |http|
-      http.get(uri.request_uri, 'Authorization' => "Bearer #{token}", 'Accept' => 'application/json')
+    # unparsed_uri keeps the original percent-encoding (instrument keys
+    # contain '|' and spaces); req.path would decode them and break URI()
+    raw = req.unparsed_uri.sub(%r{^/api}, '')
+    out = Net::HTTP.start('api.upstox.com', 443, use_ssl: true) do |http|
+      http.get(raw, 'Authorization' => "Bearer #{token}", 'Accept' => 'application/json')
     end
     res.status = out.code.to_i
     res.body = out.body
