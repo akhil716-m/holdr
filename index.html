@@ -7,6 +7,7 @@
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script>
@@ -40,6 +41,7 @@
     --glass-blur: blur(13px) saturate(145%) brightness(1.06);
     --glass-blur-soft: blur(7px) saturate(122%) brightness(1.03);
     --glass-blur-flat: blur(9px) saturate(105%) brightness(1.02);
+    --glass-blur-dock: blur(12px) saturate(145%) brightness(1.06);
     --text: #F4F4F5; --text-muted: #8A8B94; --text-faint: #55565F;
     --chart-line: #ECECEE; --chart-grey: #45464E;
     --accent: #9B84F5; --accent-soft: rgba(155,132,245,0.10);
@@ -56,7 +58,7 @@
     --surface: #131316; --surface-2: #1B1B1F; --elevated: #232328;
     --glass-edge: rgba(255,255,255,0.05); --glass-shadow: rgba(0,0,0,0.45);
     --glass-sheen: none;
-    --glass-blur: none; --glass-blur-soft: none; --glass-blur-flat: none;
+    --glass-blur: none; --glass-blur-soft: none; --glass-blur-flat: none; --glass-blur-dock: none;
   }
   * { -webkit-font-smoothing: antialiased; }
   html { scrollbar-color: var(--border-strong) transparent; }
@@ -100,26 +102,28 @@
   .ring-focus:focus { outline: none; box-shadow: 0 0 0 3px var(--ring); border-color: var(--accent); }
   .hov { transition: background .15s ease, border-color .15s ease, color .15s ease, transform .15s ease; }
   .hov:hover { background: var(--surface-2); }
-  .tape-mask { overflow: hidden; }
-  .tape { display: flex; width: max-content; animation: tape 42s linear infinite; }
-  .tape:hover { animation-play-state: paused; }
-  @keyframes tape { from { transform: translateX(0); } to { transform: translateX(-50%); } }
   .pulse-dot { position: relative; }
   .pulse-dot::after { content:''; position:absolute; inset:-3px; border-radius:9999px; background: currentColor; opacity:.3; animation: pulse 2.4s ease-out infinite; }
   @keyframes pulse { 0% { transform: scale(1); opacity:.3; } 100% { transform: scale(2.3); opacity:0; } }
   .fade-up { animation: fadeUp .45s cubic-bezier(.2,.7,.2,1) both; }
   @keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+  /* ticker tape */
+  .tape-mask { overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
+  .tape { display: flex; width: max-content; animation: tape 46s linear infinite; }
+  .tape:hover { animation-play-state: paused; }
+  @keyframes tape { from { transform: translateX(0); } to { transform: translateX(-50%); } }
   .draw-line { stroke-dasharray: 2400; stroke-dashoffset: 2400; animation: draw 1.6s cubic-bezier(.4,0,.2,1) forwards; }
   @keyframes draw { to { stroke-dashoffset: 0; } }
   .fade-in-slow { animation: fadeIn 1s ease .55s both; }
   @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
-  /* floating dock */
+  /* floating dock — vertical, left edge */
   .dock {
-    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 50;
-    display: flex; align-items: center; gap: 2px; padding: 6px;
-    background: color-mix(in srgb, var(--elevated) 88%, transparent);
+    position: fixed; left: 22px; top: 50%; transform: translateY(-50%); z-index: 50;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px;
+    background-color: var(--elevated);
+    background-image: var(--glass-sheen);
     border: 1px solid var(--border-strong); border-radius: 9999px;
-    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: var(--glass-blur-dock); -webkit-backdrop-filter: var(--glass-blur-dock);
     box-shadow: 0 12px 40px -8px rgba(0,0,0,0.45);
   }
   .dock-btn {
@@ -128,9 +132,9 @@
   }
   .dock-btn:hover { color: var(--text); background: var(--surface-2); }
   .dock-btn.active { color: var(--text); background: var(--surface-2); border: 1px solid var(--border-strong); }
-  .dock-sep { width:1px; height:20px; background: var(--border-strong); margin: 0 5px; }
+  .dock-sep { width:20px; height:1px; background: var(--border-strong); margin: 5px 0; }
   .dock-label {
-    position: absolute; bottom: 46px; left: 50%; transform: translateX(-50%);
+    position: absolute; left: 46px; top: 50%; transform: translateY(-50%);
     border: 1px solid var(--border); color: var(--text);
     font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; white-space: nowrap;
     opacity: 0; pointer-events: none; transition: opacity .12s ease;
@@ -237,6 +241,222 @@ const SEARCHABLE = [
   { symbol: 'WIPRO', name: 'Wipro', mono: 'WI', hue: '#6E8BFB' },
   { symbol: 'SUNPHARMA', name: 'Sun Pharma', mono: 'SP', hue: '#F87171' },
 ];
+
+/* ====================== PORTFOLIO IMPORT (CSV / XLSX) ====================== */
+/* known symbols → display metadata, used to enrich imported holdings */
+const STOCK_INFO = {
+  TCS: { name: 'Tata Consultancy Services', mono: 'TC', hue: '#9B84F5', sector: 'IT Services' },
+  HDFCBANK: { name: 'HDFC Bank', mono: 'HB', hue: '#6E8BFB', sector: 'Banking' },
+  ETERNAL: { name: 'Eternal (Zomato)', mono: 'ET', hue: '#F87171', sector: 'Consumer Internet' },
+  ZOMATO: { name: 'Eternal (Zomato)', mono: 'ET', hue: '#F87171', sector: 'Consumer Internet' },
+  INFY: { name: 'Infosys', mono: 'IN', hue: '#9B84F5', sector: 'IT Services' },
+  TATAMOTORS: { name: 'Tata Motors', mono: 'TM', hue: '#4ADE80', sector: 'Auto' },
+  PAYTM: { name: 'One97 Communications', mono: 'PT', hue: '#FBBF24', sector: 'Fintech' },
+  RELIANCE: { name: 'Reliance Industries', mono: 'RE', hue: '#6E8BFB', sector: 'Energy' },
+  ICICIBANK: { name: 'ICICI Bank', mono: 'IC', hue: '#FBBF24', sector: 'Banking' },
+  BAJFINANCE: { name: 'Bajaj Finance', mono: 'BF', hue: '#F87171', sector: 'Fintech' },
+  ADANIENT: { name: 'Adani Enterprises', mono: 'AE', hue: '#4ADE80', sector: 'Diversified' },
+  ITC: { name: 'ITC Limited', mono: 'IT', hue: '#9B84F5', sector: 'FMCG' },
+  WIPRO: { name: 'Wipro', mono: 'WI', hue: '#6E8BFB', sector: 'IT Services' },
+  SUNPHARMA: { name: 'Sun Pharma', mono: 'SP', hue: '#F87171', sector: 'Pharma & Healthcare' },
+  HAL: { name: 'Hindustan Aeronautics', mono: 'HA', hue: '#4ADE80', sector: 'Defence & Aerospace' },
+  BEL: { name: 'Bharat Electronics', mono: 'BE', hue: '#4ADE80', sector: 'Defence & Aerospace' },
+  LT: { name: 'Larsen & Toubro', mono: 'LT', hue: '#6E8BFB', sector: 'Capital Goods' },
+  'M&M': { name: 'Mahindra & Mahindra', mono: 'MM', hue: '#6E8BFB', sector: 'Auto & EV' },
+  SBIN: { name: 'State Bank of India', mono: 'SB', hue: '#FBBF24', sector: 'PSU Banks' },
+  KOTAKBANK: { name: 'Kotak Mahindra', mono: 'KM', hue: '#FBBF24', sector: 'Banking' },
+  HINDUNILVR: { name: 'Hindustan Unilever', mono: 'HU', hue: '#9B84F5', sector: 'FMCG' },
+  NESTLEIND: { name: 'Nestlé India', mono: 'NE', hue: '#9B84F5', sector: 'FMCG' },
+  NTPC: { name: 'NTPC', mono: 'NT', hue: '#4ADE80', sector: 'Energy & Power' },
+  POWERGRID: { name: 'Power Grid', mono: 'PG', hue: '#4ADE80', sector: 'Energy & Power' },
+  TATASTEEL: { name: 'Tata Steel', mono: 'TS', hue: '#F87171', sector: 'Metals & Mining' },
+  HINDALCO: { name: 'Hindalco', mono: 'HI', hue: '#F87171', sector: 'Metals & Mining' },
+  DIVISLAB: { name: "Divi's Labs", mono: 'DL', hue: '#F87171', sector: 'Pharma & Healthcare' },
+  LTIM: { name: 'LTIMindtree', mono: 'LM', hue: '#9B84F5', sector: 'IT Services' },
+};
+/* fallback palette for symbols we don't recognise — picked deterministically from the symbol name */
+const HUE_PALETTE = ['#6E8BFB', '#FBBF24', '#F87171', '#4ADE80', '#9B84F5'];
+
+/* tiny CSV parser — handles quoted fields with embedded commas/newlines, returns raw rows */
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.some(v => v.trim() !== '')) rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); if (row.some(v => v.trim() !== '')) rows.push(row); }
+  return rows;
+}
+
+/* common broker-export column-name variants, normalised (lowercase, no spaces/underscores).
+   'symbol'/'name' are tried before 'isin' — ISIN codes are a last-resort identifier, since
+   they're not human-readable and many P&L reports list ISIN alongside a proper name column */
+const COLUMN_ALIASES = {
+  symbol: ['tradingsymbol', 'symbol', 'instrument', 'stock', 'scrip'],
+  name: ['scripname', 'companyname', 'securityname', 'stockname', 'particulars', 'description', 'name'],
+  isin: ['isin'],
+  qty: ['qty', 'quantity', 'shares', 'units', 'netquantity', 'currentqty', 'holdingqty'],
+  avgPrice: ['avgprice', 'avgcost', 'averageprice', 'averagecost', 'buyprice', 'buyavg', 'avg', 'costprice', 'purchaseprice'],
+  ltp: ['ltp', 'lastprice', 'currentprice', 'marketprice', 'cmp', 'closingprice', 'price'],
+  buyValue: ['buyvalue', 'buyamount', 'totalbuyvalue', 'purchasevalue', 'buyvalueinr'],
+};
+/* matches a 12-character ISIN like INE848E01016 */
+const ISIN_RE = /^IN[A-Z0-9]{10}$/;
+function normalizeHeader(h) { return String(h).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function findCol(headers, aliases) {
+  const normalized = headers.map(normalizeHeader);
+  for (const alias of aliases) {
+    const idx = normalized.indexOf(alias);
+    if (idx !== -1) return headers[idx];
+  }
+  for (const alias of aliases) {
+    const idx = normalized.findIndex(h => h.includes(alias));
+    if (idx !== -1) return headers[idx];
+  }
+  return null;
+}
+
+/* broker exports (esp. Zerodha P&L reports) have a few title/summary rows before the real
+   table — scan for the row that actually looks like a header row (has symbol + qty columns) */
+function tableFromRows(rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].map(c => String(c ?? '').trim());
+    const hasId = findCol(cells, COLUMN_ALIASES.symbol) || findCol(cells, COLUMN_ALIASES.name) || findCol(cells, COLUMN_ALIASES.isin);
+    if (hasId && findCol(cells, COLUMN_ALIASES.qty)) {
+      const headers = cells;
+      const table = rows.slice(i + 1).map(r => {
+        const obj = {};
+        headers.forEach((h, j) => obj[h] = String(r[j] ?? '').trim());
+        return obj;
+      });
+      return { headers, table };
+    }
+  }
+  throw new Error("Couldn't find a holdings table in this file.");
+}
+
+function buildHolding(symbolRaw, qty, avgPrice, ltp, nameRaw) {
+  let symbol = String(symbolRaw).trim().toUpperCase();
+  let id = symbol.toLowerCase().replace(/[^a-z0-9]/g, '');
+  let displayName = null;
+  /* ISIN codes (e.g. INE848E01016) aren't human-readable — if the file also gave us a company
+     name, derive a ticker-like symbol from it and keep the ISIN only as the internal id */
+  if (ISIN_RE.test(symbol) && nameRaw) {
+    displayName = nameRaw.trim();
+    id = symbol.toLowerCase();
+    symbol = displayName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) || symbol;
+  }
+  const info = STOCK_INFO[symbol];
+  const hue = info?.hue || HUE_PALETTE[seedFromString(symbol) % HUE_PALETTE.length];
+  const mono = info?.mono || symbol.slice(0, 2);
+  const safeAvg = avgPrice || ltp || 0;
+  const safeLtp = ltp || avgPrice || 0;
+  return {
+    id,
+    symbol, name: info?.name || displayName || symbol, mono, hue,
+    qty, avgPrice: safeAvg, ltp: safeLtp,
+    sector: info?.sector || 'Diversified', buyDate: TODAY.toISOString().slice(0, 10),
+    sentiment: 'neutral', sentimentScore: 50, alpha: safeAvg ? Math.round(((safeLtp - safeAvg) / safeAvg) * 1000) / 10 : 0,
+    thesis: 'Imported from your statement — add a note about why you hold this.',
+    thesisStatus: 'intact',
+    news: [{ tag: 'Update', text: `Tracking ${symbol} — fresh news will appear here as it breaks.`, time: 'just now' }],
+    events: [{ label: 'Next earnings window', date: 'TBA', type: 'earnings' }],
+    action: 'watch',
+  };
+}
+
+/* turns parsed table rows into holding objects, mapping broker column names onto our schema.
+   handles both single-row holdings exports and multi-row P&L reports (one row per buy/sell lot,
+   aggregated per symbol — avg price is derived from total buy value / total quantity) */
+function rowsToHoldings(headers, table) {
+  const cols = {
+    symbol: findCol(headers, COLUMN_ALIASES.symbol),
+    name: findCol(headers, COLUMN_ALIASES.name),
+    isin: findCol(headers, COLUMN_ALIASES.isin),
+    qty: findCol(headers, COLUMN_ALIASES.qty),
+    avgPrice: findCol(headers, COLUMN_ALIASES.avgPrice),
+    ltp: findCol(headers, COLUMN_ALIASES.ltp),
+    buyValue: findCol(headers, COLUMN_ALIASES.buyValue),
+  };
+  const idCol = cols.symbol || cols.name || cols.isin;
+  if (!idCol || !cols.qty) {
+    throw new Error("Couldn't find symbol and quantity columns in this file.");
+  }
+  const agg = new Map();
+  for (const row of table) {
+    const symbolRaw = row[idCol];
+    const qty = Math.abs(parseFloat(String(row[cols.qty]).replace(/,/g, '')));
+    if (!symbolRaw || !qty || isNaN(qty)) continue;
+    const symbol = symbolRaw.trim().toUpperCase();
+    if (!symbol || symbol.length > 24) continue;
+    const nameRaw = cols.name && idCol !== cols.name ? row[cols.name] : null;
+    const avgPriceCell = cols.avgPrice ? parseFloat(String(row[cols.avgPrice]).replace(/,/g, '')) : NaN;
+    const buyValueCell = cols.buyValue ? parseFloat(String(row[cols.buyValue]).replace(/,/g, '')) : NaN;
+    const ltpCell = cols.ltp ? parseFloat(String(row[cols.ltp]).replace(/,/g, '')) : NaN;
+    const buyValue = !isNaN(avgPriceCell) ? avgPriceCell * qty : (!isNaN(buyValueCell) ? buyValueCell : 0);
+    const entry = agg.get(symbol) || { qty: 0, buyValue: 0, ltp: 0, name: nameRaw };
+    entry.qty += qty;
+    entry.buyValue += buyValue;
+    if (!isNaN(ltpCell)) entry.ltp = ltpCell;
+    if (!entry.name && nameRaw) entry.name = nameRaw;
+    agg.set(symbol, entry);
+  }
+  const holdings = [];
+  for (const [symbol, e] of agg) {
+    if (!e.qty) continue;
+    const avgPrice = e.buyValue ? Math.round((e.buyValue / e.qty) * 100) / 100 : 0;
+    holdings.push(buildHolding(symbol, Math.round(e.qty * 100) / 100, avgPrice, e.ltp || 0, e.name));
+  }
+  if (!holdings.length) throw new Error('No valid holdings found in this file.');
+  return holdings;
+}
+
+/* reads a CSV / XLSX file and returns an array of holding objects */
+function parsePortfolioFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    return file.text().then(text => {
+      const rows = parseCSV(text);
+      try {
+        const { headers, table } = tableFromRows(rows);
+        return rowsToHoldings(headers, table);
+      } catch (e) {
+        e.debug = rows.slice(0, 8).map(r => r.join(' | ')).join('\n');
+        throw e;
+      }
+    });
+  }
+  if (ext === 'xlsx' || ext === 'xls') {
+    return file.arrayBuffer().then(buf => {
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheetRows = wb.SheetNames.map(name => [name, XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: '' })]);
+      for (const [, rows] of sheetRows) {
+        try {
+          const { headers, table } = tableFromRows(rows);
+          return rowsToHoldings(headers, table);
+        } catch (e) { /* try next sheet */ }
+      }
+      const err = new Error("Couldn't find a holdings table in this file.");
+      err.debug = sheetRows.map(([name, rows]) =>
+        `Sheet "${name}":\n` + rows.slice(0, 8).map(r => r.join(' | ')).join('\n')
+      ).join('\n\n');
+      throw err;
+    });
+  }
+  return Promise.reject(new Error('Unsupported file type — please upload a CSV or XLSX file.'));
+}
 
 const NEWS_FEED = [
   { stockId: 'tcs', delta: +1.4, tag: 'Earnings', text: 'Q1 net profit beats estimates, up 9% YoY on strong deal wins across BFSI and retail.', time: '2h ago' },
@@ -511,25 +731,6 @@ function Mark({ mono, hue, size = 'md' }) {
     <div className={`${dims} rounded-full flex items-center justify-center font-semibold font-mono shrink-0`}
       style={{ background: `${hue}16`, color: hue, border: `1px solid ${hue}26` }}>
       {mono}
-    </div>
-  );
-}
-
-/* ============================= TICKER TAPE ================================= */
-function TickerTape({ holdings, trends }) {
-  const items = holdings.map(h => ({ symbol: h.symbol, ltp: h.ltp, change: trends[h.id]?.dayChange ?? 0 }));
-  const strip = [...items, ...items];
-  return (
-    <div className="tape-mask relative z-10" style={{ borderBottom: '1px solid var(--border)' }}>
-      <div className="tape py-1.5">
-        {strip.map((it, i) => (
-          <div key={i} className="flex items-center gap-2 px-5 whitespace-nowrap">
-            <span className="text-[10.5px] font-medium text-faint">{it.symbol}</span>
-            <span className="text-[10.5px] num text-muted">{fmtINR(it.ltp)}</span>
-            <Delta value={it.change} precision={2} />
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1050,6 +1251,39 @@ function MarketPulse({ liveMacro = {}, liveFlows = null }) {
   );
 }
 
+/* scrolling ticker — holdings (when present) plus market indices/macro, so it always has
+   content in both Demo and Live mode even before any positions are added */
+function TickerTape({ holdings, trends, liveMacro = {}, liveNifty = null }) {
+  const holdingItems = holdings.map(h => ({
+    key: h.id, label: h.symbol, value: fmtINR(h.ltp), change: trends[h.id]?.dayChange ?? 0,
+  }));
+  const niftyChg = liveNifty?.dayChg ?? +0.4;
+  const indexItems = [
+    { key: 'nifty', label: 'NIFTY 50', value: liveNifty ? liveNifty.price.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '24,812', change: niftyChg },
+  ];
+  const macroItems = MARKET_INFLUENCES.map(m => {
+    const q = liveMacro[m.id];
+    return { key: m.id, label: m.label, value: (q?.display || m.value) + (m.unit || ''), change: q ? q.chg : m.chg };
+  });
+  const items = [...indexItems, ...holdingItems, ...macroItems];
+  const strip = [...items, ...items]; // duplicated for seamless loop
+  return (
+    <div className="tape-mask relative z-10" style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+      <div className="tape py-2">
+        {strip.map((it, i) => (
+          <div key={i} className="flex items-center gap-2 px-5 whitespace-nowrap shrink-0" style={{ borderRight: '1px solid var(--border)' }}>
+            <span className="text-[11px] font-semibold tracking-wide text-muted">{it.label}</span>
+            <span className="text-[11px] num">{it.value}</span>
+            <span className="text-[11px] num font-medium" style={{ color: it.change >= 0 ? 'var(--up)' : 'var(--down)' }}>
+              {it.change >= 0 ? '▲' : '▼'}{Math.abs(it.change).toFixed(2)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* full-width recap strip — four visual tiles, one fact each */
 function DailyRecap({ holdings, totals, mode }) {
   const flagged = holdings.filter(h => h.action === 'review');
@@ -1069,7 +1303,7 @@ function DailyRecap({ holdings, totals, mode }) {
         <span className="text-[10px] num text-faint">{mode === 'active' ? '9:15 AM' : 'Mon 9:15'}</span>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5">
         {/* performance — the race, told as two labeled bars + a verdict */}
         {(() => {
           const youPct = totals.pnlPct;
@@ -1089,12 +1323,12 @@ function DailyRecap({ holdings, totals, mode }) {
             </div>
           );
           return (
-            <div className="px-4 first:pl-0 py-2">
+            <div className="px-4 first:pl-0 py-2 lg:col-span-2">
               <p className="text-[13px] font-medium leading-none">
                 {ahead ? 'Beating the market' : 'Trailing the market'}
                 <span className="num ml-1.5" style={{ color: ahead ? 'var(--up)' : 'var(--warn)' }}>{ahead ? '+' : '−'}{Math.abs(totals.alphaPeriod).toFixed(1)}%</span>
               </p>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-2 max-w-[260px]">
                 <Row label="you" v={youPct} you />
                 <Row label="NIFTY" v={niftyPct} />
               </div>
@@ -1108,7 +1342,10 @@ function DailyRecap({ holdings, totals, mode }) {
             {flagged.map(h => <Mark key={h.id} mono={h.mono} hue={h.hue} />)}
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-medium leading-none">{flagged.length} flagged</p>
+            <p className="text-[13px] font-medium leading-none flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: flagged.some(h => h.thesisStatus === 'broken') ? 'var(--down)' : 'var(--warn)' }}></span>
+              {flagged.length} flagged
+            </p>
             <p className="text-[10.5px] text-muted leading-[1.5] mt-1.5">
               {flagged.map((h, i) => <React.Fragment key={h.id}>{i > 0 && <br/>}{h.symbol} · thesis <span style={{ color: h.thesisStatus === 'broken' ? 'var(--down)' : 'var(--warn)' }}>{h.thesisStatus}</span></React.Fragment>)}
             </p>
@@ -1127,7 +1364,10 @@ function DailyRecap({ holdings, totals, mode }) {
               <span className="absolute inset-0 flex items-center justify-center text-[9px] num font-medium">{mat.t.daysToLT}d</span>
             </div>
             <div className="min-w-0">
-              <p className="text-[13px] font-medium leading-none">{mat.h.symbol}</p>
+              <p className="text-[13px] font-medium leading-none flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: mat.t.daysToLT <= 14 ? 'var(--warn)' : 'var(--accent)' }}></span>
+                {mat.h.symbol}
+              </p>
               <p className="text-[10.5px] text-muted leading-[1.5] mt-1.5">turns long-term<br/>tax <span className="num">20% → <span style={{ color: 'var(--up)' }}>12.5%</span></span></p>
             </div>
           </div>
@@ -1768,10 +2008,31 @@ function AddHoldingModal({ onClose, onAdd }) {
   const [qty, setQty] = useState('');
   const [price, setPrice] = useState('');
   const [fileName, setFileName] = useState(null);
+  const [parseStatus, setParseStatus] = useState('idle'); // idle | parsing | done | error
+  const [parsedHoldings, setParsedHoldings] = useState([]);
+  const [parseError, setParseError] = useState('');
+  const [parseDebug, setParseDebug] = useState('');
+  const [showDebug, setShowDebug] = useState(false);
   const fileRef = useRef(null);
 
   const results = query.trim() ? SEARCHABLE.filter(s => (s.symbol + s.name).toLowerCase().includes(query.toLowerCase())) : SEARCHABLE;
-  const handleFile = e => { const f = e.target.files[0]; if (f) setFileName(f.name); };
+  const handleFile = e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    setFileName(f.name);
+    setParseStatus('parsing');
+    setParseError('');
+    setParseDebug('');
+    setShowDebug(false);
+    setParsedHoldings([]);
+    parsePortfolioFile(f)
+      .then(holdings => { setParsedHoldings(holdings); setParseStatus('done'); })
+      .catch(err => {
+        setParseError(err.message || 'Could not read this file.');
+        setParseDebug(err.debug || '');
+        setParseStatus('error');
+      });
+  };
 
   const submitManual = () => {
     if (!picked || !qty || !price) return;
@@ -1789,7 +2050,7 @@ function AddHoldingModal({ onClose, onAdd }) {
     });
     onClose();
   };
-  const submitUpload = () => { onAdd('demo-batch'); onClose(); };
+  const submitUpload = () => { onAdd(parsedHoldings); onClose(); };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center backdrop-blur-sm" style={{ background: 'rgba(3,3,5,0.6)' }} onClick={onClose}>
@@ -1850,19 +2111,148 @@ function AddHoldingModal({ onClose, onAdd }) {
             <div onClick={() => fileRef.current.click()}
               className="rounded-xl p-8 text-center cursor-pointer transition-colors hov"
               style={{ border: '1.5px dashed var(--border-strong)' }}>
-              <p className="text-[12.5px] font-medium">{fileName || 'Drop your P&L statement or holdings CSV'}</p>
-              <p className="text-[10.5px] text-faint mt-1.5">Supports CSV, XLSX from Zerodha, Groww, Upstox & more</p>
-              <input ref={fileRef} type="file" accept=".csv,.xlsx,.pdf" className="hidden" onChange={handleFile} />
+              <p className="text-[12.5px] font-medium">{fileName || 'Drop your holdings CSV or XLSX'}</p>
+              <p className="text-[10.5px] text-faint mt-1.5">Supports CSV and XLSX exports from Zerodha, Groww, Upstox & more</p>
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile} />
             </div>
-            <button onClick={submitUpload} disabled={!fileName}
+
+            {parseStatus === 'parsing' && (
+              <p className="text-[11px] text-center text-faint">Reading {fileName}…</p>
+            )}
+            {parseStatus === 'error' && (
+              <div className="text-center space-y-1.5">
+                <p className="text-[11px]" style={{ color: 'var(--down)' }}>{parseError}</p>
+                {parseDebug && (
+                  <>
+                    <button onClick={() => setShowDebug(s => !s)} className="text-[10.5px] underline text-faint">
+                      {showDebug ? 'Hide' : 'Show'} file contents
+                    </button>
+                    {showDebug && (
+                      <pre className="text-left text-[10px] leading-[1.5] p-2.5 rounded-lg overflow-x-auto whitespace-pre"
+                        style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', maxHeight: '200px' }}>
+                        {parseDebug}
+                      </pre>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {parseStatus === 'done' && (
+              <div className="rounded-xl p-3 space-y-1.5" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <p className="text-[11px] font-medium">{parsedHoldings.length} holding{parsedHoldings.length > 1 ? 's' : ''} found</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {parsedHoldings.map(h => (
+                    <span key={h.id} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10.5px]" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                      <Mark mono={h.mono} hue={h.hue} size="sm" />
+                      {h.symbol} <span className="text-faint">· {h.qty}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button onClick={submitUpload} disabled={parseStatus !== 'done'}
               className="w-full py-3 rounded-xl font-medium text-[12.5px] transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
               style={{ background: 'var(--text)', color: 'var(--bg)' }}>
-              Parse & import holdings
+              Import holdings
             </button>
-            <p className="text-[10.5px] text-center text-faint">Prototype — uploading loads a sample portfolio.</p>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* local profile switcher — lets different people use this prototype on the same device,
+   each with their own Live holdings stored under a separate localStorage namespace */
+function ProfileSwitcher({ profile, profiles, onSwitch, onAdd, hasLiveData, onClear }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  const handleAdd = () => {
+    const name = window.prompt('Name for the new profile?');
+    if (name) onAdd(name);
+    setOpen(false);
+  };
+  const handleClear = () => {
+    if (window.confirm(`Clear all imported holdings for "${profile}"?`)) onClear();
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full surface glass-flat hov">
+        <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold"
+          style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+          {profile.charAt(0).toUpperCase()}
+        </span>
+        <span className="hidden sm:inline text-[11px] font-medium text-muted">{profile}</span>
+        <span className="text-faint" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform .15s' }}>
+          <Icon.chevron />
+        </span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+6px)] w-48 rounded-xl p-1.5 shadow-2xl fade-up z-30"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border-strong)' }}>
+          {profiles.map(p => (
+            <button key={p} onClick={() => { onSwitch(p); setOpen(false); }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hov"
+              style={p === profile ? { background: 'var(--surface-2)' } : {}}>
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold"
+                style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                {p.charAt(0).toUpperCase()}
+              </span>
+              <span className="text-[12px] font-medium truncate">{p}</span>
+            </button>
+          ))}
+          <div className="my-1 border-t" style={{ borderColor: 'var(--border)' }}></div>
+          <button onClick={handleAdd} className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hov text-faint">
+            <span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-2)' }}>
+              <Icon.plus />
+            </span>
+            <span className="text-[12px] font-medium">New profile</span>
+          </button>
+          {hasLiveData && (
+            <button onClick={handleClear} className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hov" style={{ color: 'var(--down)' }}>
+              <span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-2)' }}>
+                <Icon.close />
+              </span>
+              <span className="text-[12px] font-medium">Clear {profile}'s holdings</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* empty state — shown for personal-portfolio sections in Live mode (no broker connected yet) */
+function EmptyState({ title, subtitle, cta, onCta, compact }) {
+  return (
+    <div className={`flex flex-col items-center justify-center text-center ${compact ? 'py-10' : 'py-16'} px-6`}>
+      <div className="w-11 h-11 rounded-full surface-2 flex items-center justify-center mb-4" style={{ color: 'var(--text-faint)' }}>
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+          <rect x="2" y="2" width="12" height="12" rx="3" stroke="currentColor" strokeWidth="1.3" strokeDasharray="2 2" />
+          <path d="M5.5 8.5 7 10l3.5-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" opacity=".5" />
+        </svg>
+      </div>
+      <p className="text-[12.5px] font-medium">{title}</p>
+      {subtitle && <p className="text-[10.5px] text-faint mt-1.5 max-w-[280px] leading-[1.6]">{subtitle}</p>}
+      {cta && (
+        <button onClick={onCta}
+          className="mt-5 px-3.5 py-2 rounded-full text-[12px] font-medium transition-opacity hover:opacity-90"
+          style={{ background: 'var(--text)', color: 'var(--bg)' }}>
+          {cta}
+        </button>
+      )}
     </div>
   );
 }
@@ -1871,7 +2261,16 @@ function AddHoldingModal({ onClose, onAdd }) {
 function App() {
   const [theme, setTheme] = useTheme();
   const [investorMode, setInvestorMode] = useState(() => localStorage.getItem('holdr-mode') || 'longterm');
-  const [baseHoldings, setBaseHoldings] = useState(DEMO_HOLDINGS);
+  const [profile, setProfile] = useState(() => localStorage.getItem('holdr-profile') || 'You');
+  const [profiles, setProfiles] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('holdr-profiles')) || ['You']; } catch { return ['You']; }
+  });
+  const [demoHoldings, setDemoHoldings] = useState(DEMO_HOLDINGS);
+  const [liveHoldings, setLiveHoldings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`holdr-live-${profile}`)) || []; } catch { return []; }
+  });
+  const baseHoldings = investorMode === 'active' ? liveHoldings : demoHoldings;
+  const setBaseHoldings = investorMode === 'active' ? setLiveHoldings : setDemoHoldings;
   const [active, setActive] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [tab, setTab] = useState('today');
@@ -1881,6 +2280,22 @@ function App() {
   const [live, setLive] = useState({ quotes: {}, nifty: null, macro: {}, flows: null, status: 'loading', updated: null });
 
   useEffect(() => { localStorage.setItem('holdr-mode', investorMode); }, [investorMode]);
+  useEffect(() => { localStorage.setItem('holdr-profile', profile); }, [profile]);
+  useEffect(() => { localStorage.setItem('holdr-profiles', JSON.stringify(profiles)); }, [profiles]);
+  useEffect(() => { localStorage.setItem(`holdr-live-${profile}`, JSON.stringify(liveHoldings)); }, [liveHoldings, profile]);
+
+  const switchProfile = name => {
+    if (name === profile) return;
+    setProfile(name);
+    try { setLiveHoldings(JSON.parse(localStorage.getItem(`holdr-live-${name}`)) || []); } catch { setLiveHoldings([]); }
+  };
+  const addProfile = name => {
+    const clean = name.trim();
+    if (!clean || profiles.includes(clean)) return;
+    setProfiles(prev => [...prev, clean]);
+    switchProfile(clean);
+  };
+
   const flash = msg => { setToast(msg); setTimeout(() => setToast(null), 2600); };
 
   /* live quotes: holdings + NIFTY per selected period, macro daily; demo fallback */
@@ -1936,15 +2351,15 @@ function App() {
   const setMode = m => {
     setInvestorMode(m);
     setPeriod(m === 'active' ? '1W' : '1Y');
-    flash(m === 'active' ? 'Active — day moves and momentum first' : 'Long-term — the calm, zoomed-out view');
+    flash(m === 'active' ? 'Live — day moves and momentum first' : 'Demo — the calm, zoomed-out view');
   };
 
   const handleAdd = entry => {
-    if (entry === 'demo-batch') {
-      const fresh = DEMO_HOLDINGS.filter(h => !baseHoldings.some(x => x.id === h.id));
-      if (fresh.length === 0) { flash('Sample portfolio is already loaded'); return; }
+    if (Array.isArray(entry)) {
+      const fresh = entry.filter(h => !baseHoldings.some(x => x.id === h.id));
+      if (fresh.length === 0) { flash('These holdings are already in your portfolio'); return; }
       setBaseHoldings(prev => [...prev, ...fresh]);
-      flash(`Imported ${fresh.length} holdings from your file`);
+      flash(`Imported ${fresh.length} holding${fresh.length > 1 ? 's' : ''} from your file`);
     } else {
       setBaseHoldings(prev => [entry, ...prev.filter(h => h.id !== entry.id)]);
       flash(`${entry.symbol} added to your portfolio`);
@@ -2010,7 +2425,7 @@ function App() {
   ];
 
   return (
-    <div className="min-h-screen pb-28 relative">
+    <div className="min-h-screen pb-8 pl-20 relative">
       <div className="ambience"></div>
 
       {/* Header — minimal, Fey-like */}
@@ -2025,8 +2440,9 @@ function App() {
             <p className="font-medium tracking-tight text-[14px]">Holdr</p>
           </div>
           <div className="flex items-center gap-2">
+            <ProfileSwitcher profile={profile} profiles={profiles} onSwitch={switchProfile} onAdd={addProfile} hasLiveData={liveHoldings.length > 0} onClear={() => setLiveHoldings([])} />
             <div className="hidden md:flex surface glass-flat rounded-full p-[3px]">
-              {[['longterm', 'Long-term'], ['active', 'Active']].map(([key, label]) => (
+              {[['longterm', 'Demo'], ['active', 'Live']].map(([key, label]) => (
                 <button key={key} onClick={() => setMode(key)}
                   className="px-3 py-1 rounded-full text-[11px] font-medium transition-colors"
                   style={investorMode === key ? { background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border-strong)' } : { color: 'var(--text-faint)', border: '1px solid transparent' }}>
@@ -2041,7 +2457,7 @@ function App() {
               }}></span>
               <span className="text-[10.5px] font-medium text-muted">
                 {live.status === 'live'
-                  ? <>Live · {live.source === 'upstox' ? 'Upstox' : 'Yahoo'} · <span className="num">{live.updated && live.updated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span></>
+                  ? <>Live · <span className="num">{live.updated && live.updated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span></>
                   : live.status === 'loading' ? 'Fetching live data…' : 'Demo data'}
               </span>
             </div>
@@ -2049,7 +2465,9 @@ function App() {
         </div>
       </header>
 
-      {investorMode === 'active' && <div className="mt-4"><TickerTape holdings={holdings} trends={trends} /></div>}
+      <div className="mt-4">
+        <TickerTape holdings={holdings} trends={trends} liveMacro={live.macro} liveNifty={live.nifty} />
+      </div>
 
       <main className="max-w-6xl mx-auto px-5 sm:px-8 relative z-10">
 
@@ -2059,59 +2477,79 @@ function App() {
             <section className="mt-9">
               <p className="text-[12px] num text-faint">{TODAY.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
               <h1 className="text-[20px] font-medium tracking-tight mt-1">
-                Hello, Akhil. Your portfolio is <span style={{ color: mood === 'positive' ? 'var(--up)' : mood === 'neutral' ? 'var(--warn)' : 'var(--down)' }}>{mood}</span>.
+                {holdings.length === 0
+                  ? <>Hello, Akhil. <span style={{ color: 'var(--text-faint)' }}>Connect a broker to see your portfolio here.</span></>
+                  : <>Hello, Akhil. Your portfolio is <span style={{ color: mood === 'positive' ? 'var(--up)' : mood === 'neutral' ? 'var(--warn)' : 'var(--down)' }}>{mood}</span>.</>}
               </h1>
             </section>
 
             {/* ① what needs attention — recap strip, full width */}
             <section className="mt-6">
-              <DailyRecap holdings={holdings} totals={totals} mode={investorMode} />
+              {holdings.length === 0 ? (
+                <div className="surface rounded-2xl">
+                  <EmptyState compact title="No recap yet" subtitle="Once your holdings are connected, you'll see a daily snapshot of what changed and what needs attention." />
+                </div>
+              ) : (
+                <DailyRecap holdings={holdings} totals={totals} mode={investorMode} />
+              )}
             </section>
 
             {/* ② your money + ③ what's moving it */}
             <section className="mt-3 grid lg:grid-cols-5 gap-3 items-stretch">
               {/* chart card */}
               <div className="lg:col-span-3 surface rounded-2xl overflow-hidden flex flex-col">
-                <div className="p-5 pb-0">
-                  <div className="flex items-baseline gap-2.5 flex-wrap">
-                    <p className="text-[28px] num font-medium tracking-tight leading-none">{fmtINR(Math.round(totals.current))}</p>
-                    <Delta value={totals.pnlPct} />
-                    <span className="text-[11px] num text-faint">{fmtSigned(Math.round(totals.pnl))} all-time</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Delta value={totals.alphaPeriod} />
-                    <span className="text-[10.5px] text-faint">vs NIFTY 50 · invested {fmtINR(Math.round(totals.invested))}</span>
-                  </div>
-                </div>
-                <div className="mt-3 flex-1">
-                  <CompareChart key={period + '-' + live.status} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={250} period={period} />
-                </div>
-                <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: '1px solid var(--border)' }}>
-                  <div className="flex items-center gap-1">
-                    {periods.map(p => (
-                      <button key={p} onClick={() => setPeriod(p)}
-                        className="px-2 py-1 rounded-md text-[10.5px] num font-medium transition-colors"
-                        style={period === p ? { background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border-strong)' } : { color: 'var(--text-faint)', border: '1px solid transparent' }}>
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="text-[10.5px] text-faint hidden sm:block">
-                    {totals.needsReview ? <span style={{ color: 'var(--down)' }}>{totals.needsReview} flagged</span> : 'all clear'} · {holdings.length} positions
-                  </span>
-                </div>
+                {holdings.length === 0 ? (
+                  <EmptyState title="Your portfolio trend will live here" subtitle="Add holdings to track performance against NIFTY 50 over time." cta="+ Add position" onCta={() => setShowAdd(true)} />
+                ) : (
+                  <React.Fragment>
+                    <div className="p-5 pb-0">
+                      <div className="flex items-baseline gap-2.5 flex-wrap">
+                        <p className="text-[28px] num font-medium tracking-tight leading-none">{fmtINR(Math.round(totals.current))}</p>
+                        <Delta value={totals.pnlPct} />
+                        <span className="text-[11px] num text-faint">{fmtSigned(Math.round(totals.pnl))} all-time</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Delta value={totals.alphaPeriod} />
+                        <span className="text-[10.5px] text-faint">vs NIFTY 50 · invested {fmtINR(Math.round(totals.invested))}</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex-1">
+                      <CompareChart key={period + '-' + live.status} portfolio={portfolioTrend} benchmark={benchmarkTrend} height={250} period={period} />
+                    </div>
+                    <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+                      <div className="flex items-center gap-1">
+                        {periods.map(p => (
+                          <button key={p} onClick={() => setPeriod(p)}
+                            className="px-2 py-1 rounded-md text-[10.5px] num font-medium transition-colors"
+                            style={period === p ? { background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border-strong)' } : { color: 'var(--text-faint)', border: '1px solid transparent' }}>
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                      <span className="text-[10.5px] text-faint hidden sm:block">
+                        {totals.needsReview ? <span style={{ color: 'var(--down)' }}>{totals.needsReview} flagged</span> : 'all clear'} · {holdings.length} positions
+                      </span>
+                    </div>
+                  </React.Fragment>
+                )}
               </div>
 
               {/* right rail: news only */}
               <div className="lg:col-span-2 surface rounded-2xl p-5 flex flex-col min-h-0">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-faint">Your holdings in the news</p>
-                </div>
-                <div className="overflow-y-auto pr-1 flex-1" style={{ maxHeight: 280 }}>
-                  {NEWS_FEED.map((item, i) => (
-                    <NewsRow key={i} item={item} holding={holdings.find(h => h.id === item.stockId) || null} last={i === NEWS_FEED.length - 1} />
-                  ))}
-                </div>
+                {holdings.length === 0 ? (
+                  <EmptyState compact title="No news yet" subtitle="News about your holdings will show up here once you've added positions." />
+                ) : (
+                  <React.Fragment>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-faint">Your holdings in the news</p>
+                    </div>
+                    <div className="overflow-y-auto pr-1 flex-1" style={{ maxHeight: 280 }}>
+                      {NEWS_FEED.map((item, i) => (
+                        <NewsRow key={i} item={item} holding={holdings.find(h => h.id === item.stockId) || null} last={i === NEWS_FEED.length - 1} />
+                      ))}
+                    </div>
+                  </React.Fragment>
+                )}
               </div>
             </section>
 
@@ -2128,7 +2566,7 @@ function App() {
             <section className="mt-9 flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <h1 className="text-[20px] font-medium tracking-tight">Holdings</h1>
-                <p className="text-[11px] num text-faint mt-1">{investorMode === 'active' ? 'sorted by day move' : 'sorted by attention'} · {filtered.length} of {holdings.length} positions</p>
+                <p className="text-[11px] num text-faint mt-1">{holdings.length === 0 ? 'no positions yet' : `${investorMode === 'active' ? 'sorted by day move' : 'sorted by attention'} · ${filtered.length} of ${holdings.length} positions`}</p>
               </div>
               <button onClick={() => setShowAdd(true)}
                 className="px-3.5 py-2 rounded-full text-[12px] font-medium transition-opacity hover:opacity-90 flex items-center gap-1.5"
@@ -2137,7 +2575,14 @@ function App() {
               </button>
             </section>
 
+            {holdings.length === 0 && (
+              <section className="mt-5 surface rounded-2xl">
+                <EmptyState title="No holdings connected yet" subtitle="Add a position manually or import a broker statement to see your allocation, thesis health, movers and full position list here." cta="+ Add position" onCta={() => setShowAdd(true)} />
+              </section>
+            )}
+
             {/* insight strip — what the table can't say at a glance */}
+            {holdings.length > 0 && <>
             <section className="mt-5 grid sm:grid-cols-3 gap-3">
               {/* allocation */}
               <div className="surface rounded-2xl p-4">
@@ -2242,6 +2687,7 @@ function App() {
                 <div className="text-center py-16 text-faint"><p className="text-[12.5px]">Nothing in this view — try another filter.</p></div>
               )}
             </section>
+            </>}
 
           </div>
         )}
@@ -2252,7 +2698,13 @@ function App() {
               <h1 className="text-[20px] font-medium tracking-tight">Tax</h1>
               <p className="text-[11.5px] text-faint mt-1">Indicative planning numbers — confirm with a tax professional before acting.</p>
             </section>
-            <TaxView holdings={holdings} />
+            {holdings.length === 0 ? (
+              <section className="surface rounded-2xl">
+                <EmptyState title="No tax data yet" subtitle="Holding periods, gains and tax-saving windows will show up here once you've added positions." cta="+ Add position" onCta={() => setShowAdd(true)} />
+              </section>
+            ) : (
+              <TaxView holdings={holdings} />
+            )}
           </div>
         )}
 
