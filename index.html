@@ -150,6 +150,25 @@
     opacity: 0; pointer-events: none; transition: opacity .12s ease;
   }
   .dock-btn:hover .dock-label { opacity: 1; }
+  /* ===== spatial canvas — the reimagined home ===== */
+  .canvas-dots { background-image: radial-gradient(var(--dot) 1px, transparent 1px); background-size: 26px 26px; }
+  .node-wrap { position: absolute; transform: translate(-50%, -50%); z-index: 2; }
+  .node-wrap:hover, .node-wrap:focus-within { z-index: 30; }
+  .node-float { animation: floaty 6s ease-in-out infinite alternate; will-change: transform; }
+  @keyframes floaty { from { transform: translateY(-5px); } to { transform: translateY(5px); } }
+  .orb { position: relative; display: block; border-radius: 9999px; cursor: pointer; transition: transform .25s cubic-bezier(.2,.7,.2,1); }
+  .orb:hover { transform: scale(1.07); }
+  .orb-tip {
+    position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%) translateY(4px);
+    opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease;
+    border: 1px solid var(--border-strong); border-radius: 12px; white-space: nowrap;
+  }
+  .orb:hover .orb-tip, .orb:focus-visible .orb-tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (hover: none) { .orb-tip { display: none; } }
+  .constel { transition: opacity 1s ease; pointer-events: none; }
+  .bloom { animation: bloom .3s cubic-bezier(0,0,0.2,1) both; }
+  @keyframes bloom { from { opacity: 0; transform: scale(.94) translateY(16px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { .node-float, .bloom { animation: none; } }
 </style>
 </head>
 <body>
@@ -719,6 +738,7 @@ const Icon = {
   list: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5.5 4h8M5.5 8h8M5.5 12h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><circle cx="2.5" cy="4" r="1" fill="currentColor"/><circle cx="2.5" cy="8" r="1" fill="currentColor"/><circle cx="2.5" cy="12" r="1" fill="currentColor"/></svg>,
   percent: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12.5 3.5l-9 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><circle cx="4.5" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.2"/><circle cx="11.5" cy="11.5" r="2" stroke="currentColor" strokeWidth="1.2"/></svg>,
   compass: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M10.5 5.5L9 9l-3.5 1.5L7 7l3.5-1.5Z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>,
+  canvas: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="4.5" cy="5" r="2.1" stroke="currentColor" strokeWidth="1.2"/><circle cx="12" cy="3.8" r="1.3" stroke="currentColor" strokeWidth="1.2"/><circle cx="10.5" cy="11" r="2.6" stroke="currentColor" strokeWidth="1.2"/><path d="M6.3 6.4l2.4 2.6M11.6 5.2l-.5 3.2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity=".55"/></svg>,
   globe: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M2 8h12M8 2c1.8 1.7 2.8 3.8 2.8 6S9.8 12.3 8 14M8 2C6.2 3.7 5.2 5.8 5.2 8s1 4.3 2.8 6" stroke="currentColor" strokeWidth="1.2"/></svg>,
   plus: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   sun: () => <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1v1.5M7.5 12.5V14M14 7.5h-1.5M2.5 7.5H1m11.1-4.6l-1 1m-7.2 7.2l-1 1m9.2 0l-1-1M4.4 3.9l-1-1" stroke="currentColor" strokeLinecap="round"/><circle cx="7.5" cy="7.5" r="3" stroke="currentColor"/></svg>,
@@ -2230,6 +2250,375 @@ function HoldingDetail({ h, onClose, trend }) {
   );
 }
 
+/* =============================== CANVAS ==================================== */
+/* the bull and bear as star maps — abstract constellations, not illustrations */
+function Constellation({ points, edges, color, active, viewBox, className, style }) {
+  return (
+    <svg viewBox={viewBox} fill="none" className={`constel ${className || ''}`} style={{ opacity: active ? 0.36 : 0.12, ...style }}>
+      {edges.map(([a, b], i) => (
+        <line key={i} x1={points[a][0]} y1={points[a][1]} x2={points[b][0]} y2={points[b][1]} stroke={color} strokeWidth="0.9" opacity="0.55" />
+      ))}
+      {Object.entries(points).map(([k, [x, y]]) => (
+        <g key={k}>
+          <circle cx={x} cy={y} r="3.6" fill={color} opacity="0.15" />
+          <circle cx={x} cy={y} r="1.5" fill={color} />
+        </g>
+      ))}
+    </svg>
+  );
+}
+const BULL_POINTS = {
+  tail: [10, 100], rump: [34, 72], hump: [66, 50], shoulder: [102, 46], neck: [134, 40],
+  head: [156, 44], hornA: [166, 14], hornB: [186, 24], snout: [182, 60], jaw: [162, 74],
+  chest: [130, 86], belly: [88, 94], frontKnee: [126, 116], frontHoof: [120, 142],
+  hindKnee: [48, 116], hindHoof: [56, 142],
+};
+const BULL_EDGES = [
+  ['tail', 'rump'], ['rump', 'hump'], ['hump', 'shoulder'], ['shoulder', 'neck'], ['neck', 'head'],
+  ['head', 'hornA'], ['head', 'hornB'], ['head', 'snout'], ['snout', 'jaw'], ['jaw', 'chest'],
+  ['chest', 'belly'], ['belly', 'rump'], ['chest', 'frontKnee'], ['frontKnee', 'frontHoof'],
+  ['rump', 'hindKnee'], ['hindKnee', 'hindHoof'],
+];
+const BEAR_POINTS = {
+  tail: [208, 62], rump: [184, 44], hump: [144, 36], shoulder: [108, 46], neck: [80, 60],
+  ear: [64, 50], head: [50, 70], snout: [24, 90], jaw: [50, 92], chest: [88, 94],
+  belly: [134, 90], frontKnee: [72, 118], frontPaw: [64, 144], hindKnee: [170, 112], hindPaw: [178, 144],
+};
+const BEAR_EDGES = [
+  ['tail', 'rump'], ['rump', 'hump'], ['hump', 'shoulder'], ['shoulder', 'neck'], ['neck', 'ear'],
+  ['ear', 'head'], ['head', 'snout'], ['snout', 'jaw'], ['jaw', 'chest'], ['chest', 'belly'],
+  ['belly', 'rump'], ['chest', 'frontKnee'], ['frontKnee', 'frontPaw'], ['belly', 'hindKnee'], ['hindKnee', 'hindPaw'],
+];
+const Bull = props => <Constellation points={BULL_POINTS} edges={BULL_EDGES} viewBox="0 0 200 150" color="var(--up)" {...props} />;
+const Bear = props => <Constellation points={BEAR_POINTS} edges={BEAR_EDGES} viewBox="0 0 220 150" color="var(--down)" {...props} />;
+
+/* one holding as a floating orb — size = weight, height = alpha, ring = sentiment */
+function CanvasNode({ h, x, y, size, dur, delay, dayChange, spark, onOpen }) {
+  const pnl = (h.ltp - h.avgPrice) * h.qty;
+  const pnlPct = (pnl / (h.qty * h.avgPrice || 1)) * 100;
+  const tone = SENTIMENT_META[h.sentiment].tone;
+  const R = size / 2 - 3;
+  const C = 2 * Math.PI * R;
+  const score = h.sentimentScore ?? 50;
+  const day = dayChange ?? 0;
+  return (
+    <div className="node-wrap" style={{ left: `${x}%`, top: `${y}%` }}>
+      <div className="node-float" style={{ animationDuration: `${dur.toFixed(1)}s`, animationDelay: `-${delay.toFixed(1)}s` }}>
+        <button onClick={() => onOpen(h)} className="orb ring-focus" style={{ width: size, height: size }} aria-label={`${h.name} — open details`}>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 -rotate-90">
+            <circle cx={size / 2} cy={size / 2} r={R} fill="none" stroke="var(--border-strong)" strokeWidth="1.5" opacity="0.5" />
+            <circle cx={size / 2} cy={size / 2} r={R} fill="none" stroke={`var(--${tone})`} strokeWidth="2" strokeLinecap="round"
+              strokeDasharray={`${(C * score) / 100} ${C}`} opacity="0.85" />
+          </svg>
+          <span className="absolute rounded-full surface flex flex-col items-center justify-center" style={{ inset: 7 }}>
+            <span className="font-mono font-semibold leading-none" style={{ color: h.hue, fontSize: size >= 88 ? 11 : 9.5 }}>
+              {size >= 88 ? h.symbol : h.mono}
+            </span>
+            <span className="num leading-none mt-1" style={{ fontSize: 9, color: day >= 0 ? 'var(--up)' : 'var(--down)' }}>
+              {day >= 0 ? '+' : ''}{day.toFixed(1)}%
+            </span>
+          </span>
+          {h.action === 'review' && (
+            <span className="absolute w-1.5 h-1.5 rounded-full pulse-dot" style={{ top: 4, right: 4, background: 'var(--down)', color: 'var(--down)' }}></span>
+          )}
+          <span className="orb-tip glass-pop px-3 py-2 block text-left">
+            <span className="flex items-center gap-2">
+              <span className="text-[11px] font-medium">{h.name}</span>
+              <Delta value={pnlPct} />
+            </span>
+            <span className="flex items-center gap-2 mt-1.5">
+              <Sparkline data={spark} id={`orb-${h.id}`} width={72} height={20} mono={false} positive={pnl >= 0} />
+              <span className="text-[11px] num">{fmtINR(h.ltp)}</span>
+              <span className="text-[9.5px] num text-faint">{h.qty} sh</span>
+            </span>
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* the spatial home — holdings float on a field, height mapped to alpha vs NIFTY */
+function CanvasView({ holdings, trends, totals, marketMood, onOpen, onAdd }) {
+  const total = totals.current || 1;
+  const [compact, setCompact] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const onResize = () => setCompact(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const nodes = useMemo(() => {
+    const n = holdings.length;
+    const scale = compact ? 0.68 : 1;
+    return holdings.map((h, i) => {
+      const rnd = seedRandom(seedFromString(h.id + ':canvas'));
+      const w = (h.qty * h.ltp) / total;
+      const size = Math.round(Math.min(116, Math.max(62, 52 + Math.sqrt(w) * 122)) * scale);
+      const a = Math.max(-16, Math.min(16, h.alpha || 0));
+      const y = Math.max(16, Math.min(86, 50 - (a / 16) * 30 + (rnd() * 8 - 4)));
+      const x = Math.max(10, Math.min(90, n === 1 ? 50 : 11 + (i / (n - 1)) * 78 + (rnd() * 6 - 3)));
+      return { h, x, y, size, dur: 5 + rnd() * 4, delay: rnd() * 6 };
+    });
+  }, [holdings, total, compact]);
+  const mood = totals.avgSentiment >= 60 ? 'positive' : totals.avgSentiment >= 45 ? 'neutral' : 'cautious';
+
+  return (
+    <div className="fade-up">
+      <section className="mt-6 relative canvas-dots rounded-2xl" style={{ height: 'max(500px, calc(100vh - 275px))', border: '1px solid var(--border)' }}>
+        {/* greeting + portfolio hero — floats over the field */}
+        <div className="absolute top-5 left-6 z-10 pointer-events-none">
+          <p className="text-[11px] num text-faint">{TODAY.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          {holdings.length === 0 ? (
+            <h1 className="text-[14px] sm:text-[17px] font-medium tracking-tight mt-1">Hello, Akhil. <span style={{ color: 'var(--text-faint)' }}>Your canvas is waiting.</span></h1>
+          ) : (
+            <React.Fragment>
+              <h1 className="text-[14px] sm:text-[17px] font-medium tracking-tight mt-1">
+                Hello, Akhil. Your portfolio is <span style={{ color: mood === 'positive' ? 'var(--up)' : mood === 'neutral' ? 'var(--warn)' : 'var(--down)' }}>{mood}</span>.
+              </h1>
+              <div className="flex items-baseline gap-2 mt-2">
+                <p className="text-[19px] sm:text-[24px] num font-medium tracking-tight leading-none">{fmtINR(Math.round(totals.current))}</p>
+                <Delta value={totals.pnlPct} />
+              </div>
+            </React.Fragment>
+          )}
+        </div>
+
+        {/* the line to beat */}
+        <div className="absolute left-0 right-0 top-1/2 z-0" style={{ borderTop: '1px dashed var(--border-strong)' }}>
+          <span className="absolute right-4 -top-2.5 text-[9px] uppercase tracking-[0.12em] font-semibold text-faint px-2 py-0.5 rounded-full" style={{ background: 'var(--bg)' }}>
+            NIFTY 50 — the line to beat
+          </span>
+        </div>
+        <span className="absolute right-5 top-[13%] text-[9px] uppercase tracking-[0.14em] text-faint font-semibold opacity-70 pointer-events-none">beating the market ↑</span>
+        <span className="absolute right-5 bottom-[10%] text-[9px] uppercase tracking-[0.14em] text-faint font-semibold opacity-70 pointer-events-none">lagging ↓</span>
+
+        {/* the two moods of the market — whichever rules today burns brighter */}
+        <Bull active={marketMood !== 'bear'} className="absolute hidden sm:block" style={{ left: '38%', top: '4%', width: 190 }} />
+        <Bear active={marketMood === 'bear'} className="absolute hidden sm:block" style={{ right: '20%', bottom: '5%', width: 210 }} />
+
+        {holdings.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <EmptyState title="Your canvas is empty" subtitle="Add holdings and they'll float here as living positions — size is weight, height is performance vs NIFTY." cta="+ Add position" onCta={onAdd} />
+          </div>
+        ) : nodes.map(({ h, ...pos }) => (
+          <CanvasNode key={h.id} h={h} {...pos} dayChange={trends[h.id]?.dayChange} spark={trends[h.id]?.series || genTrend(h.id, h.ltp)} onOpen={onOpen} />
+        ))}
+
+        {/* how to read this */}
+        <div className="absolute bottom-4 left-6 z-10 flex flex-wrap items-center gap-x-4 gap-y-1 pointer-events-none">
+          {[['size', 'position value'], ['height', 'vs NIFTY 50'], ['ring', 'sentiment'], ['red dot', 'needs review']].map(([k, v]) => (
+            <span key={k} className="text-[9.5px] text-faint"><span className="font-semibold uppercase tracking-[0.08em]">{k}</span> — {v}</span>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ---- bento tiles — each communicates one idea, visually first ---- */
+function GaugeTile({ label, value, tone, sub, className }) {
+  const pct = Math.max(0, Math.min(100, value ?? 50));
+  const C = Math.PI * 48;
+  return (
+    <div className={`surface rounded-2xl p-4 flex flex-col items-center ${className || ''}`}>
+      <p className="text-[9px] uppercase tracking-[0.1em] text-faint font-semibold self-start">{label}</p>
+      <div className="flex-1 flex items-end justify-center relative mt-1">
+        <svg width="132" height="74" viewBox="0 0 120 68">
+          <path d="M 12 62 A 48 48 0 0 1 108 62" fill="none" stroke="var(--border-strong)" strokeWidth="6" strokeLinecap="round" opacity="0.45" />
+          <path d="M 12 62 A 48 48 0 0 1 108 62" fill="none" stroke={`var(--${tone})`} strokeWidth="6" strokeLinecap="round"
+            strokeDasharray={`${(C * pct) / 100} ${C}`} />
+        </svg>
+        <p className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[22px] num font-medium leading-none">{Math.round(pct)}</p>
+      </div>
+      <p className="text-[10px] mt-2 font-medium" style={{ color: `var(--${tone})` }}>{sub}</p>
+    </div>
+  );
+}
+
+function TaxRingTile({ h, className }) {
+  const tax = taxInfo(h);
+  const pct = Math.min(1, tax.heldDays / 365);
+  const R = 30, C = 2 * Math.PI * R;
+  const tone = tax.isLT ? 'up' : 'warn';
+  return (
+    <div className={`surface rounded-2xl p-4 flex flex-col items-center ${className || ''}`}>
+      <p className="text-[9px] uppercase tracking-[0.1em] text-faint font-semibold self-start">Tax clock</p>
+      <div className="flex-1 flex items-center justify-center relative mt-1">
+        <svg width="84" height="84" viewBox="0 0 76 76" className="-rotate-90">
+          <circle cx="38" cy="38" r={R} fill="none" stroke="var(--border-strong)" strokeWidth="5" opacity="0.45" />
+          <circle cx="38" cy="38" r={R} fill="none" stroke={`var(--${tone})`} strokeWidth="5" strokeLinecap="round"
+            strokeDasharray={`${C * pct} ${C}`} />
+        </svg>
+        <p className="absolute text-[14px] num font-medium" style={{ color: `var(--${tone})` }}>{tax.isLT ? 'LT ✓' : `${tax.daysToLT}d`}</p>
+      </div>
+      <p className="text-[10px] text-faint mt-2 text-center leading-snug">{tax.isLT ? 'long-term — 12.5% rate' : 'to long-term, then 12.5% vs 20%'}</p>
+    </div>
+  );
+}
+
+function AlphaTile({ alpha, className }) {
+  const a = Math.max(-20, Math.min(20, alpha || 0));
+  const half = (Math.abs(a) / 20) * 50;
+  const up = a >= 0;
+  return (
+    <div className={`surface rounded-2xl p-4 flex flex-col ${className || ''}`}>
+      <p className="text-[9px] uppercase tracking-[0.1em] text-faint font-semibold">vs NIFTY 50</p>
+      <div className="flex-1 flex flex-col justify-center">
+        <p className="text-[22px] num font-medium leading-none" style={{ color: up ? 'var(--up)' : 'var(--down)' }}>{up ? '+' : ''}{(alpha || 0).toFixed(1)}%</p>
+        <div className="relative h-[6px] rounded-full mt-3" style={{ background: 'var(--surface-2)' }}>
+          <span className="absolute -top-[3px] -bottom-[3px] left-1/2 w-px" style={{ background: 'var(--border-strong)' }}></span>
+          <span className="absolute top-0 bottom-0 rounded-full" style={{
+            left: up ? '50%' : `${50 - half}%`, width: `${half}%`,
+            background: up ? 'var(--up)' : 'var(--down)', opacity: 0.85 }}></span>
+        </div>
+        <div className="flex justify-between mt-1.5 text-[9px] text-faint num"><span>lagging</span><span>NIFTY</span><span>beating</span></div>
+      </div>
+    </div>
+  );
+}
+
+function PositionTile({ h, className }) {
+  const invested = h.qty * h.avgPrice, current = h.qty * h.ltp;
+  const max = Math.max(invested, current) || 1;
+  const up = current >= invested;
+  return (
+    <div className={`surface rounded-2xl p-4 flex flex-col ${className || ''}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-[9px] uppercase tracking-[0.1em] text-faint font-semibold">Position</p>
+        <p className="text-[10px] num text-faint">{h.qty} × {fmtINR(h.avgPrice)}</p>
+      </div>
+      <div className="flex-1 flex flex-col justify-center gap-2.5 mt-2">
+        {[['invested', invested, 'var(--chart-grey)'], ['now', current, up ? 'var(--up)' : 'var(--down)']].map(([label, v, color]) => (
+          <div key={label}>
+            <div className="flex justify-between text-[9.5px] mb-1">
+              <span className="text-faint uppercase tracking-[0.08em] font-semibold">{label}</span>
+              <span className="num text-muted">{fmtINR(Math.round(v))}</span>
+            </div>
+            <div className="h-[5px] rounded-full" style={{ background: 'var(--surface-2)' }}>
+              <div className="h-full rounded-full" style={{ width: `${(v / max) * 100}%`, background: color, opacity: 0.85 }}></div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10.5px] num mt-2" style={{ color: up ? 'var(--up)' : 'var(--down)' }}>
+        {fmtSigned(Math.round(current - invested))} · {(((current - invested) / (invested || 1)) * 100).toFixed(1)}%
+      </p>
+    </div>
+  );
+}
+
+/* click a node → the stock blooms into a bento grid */
+function StockBento({ h, trend, dayChange, period, onClose }) {
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const invested = h.qty * h.avgPrice, current = h.qty * h.ltp;
+  const pnl = current - invested, pnlPct = (pnl / (invested || 1)) * 100;
+  const positive = pnl >= 0;
+  const sentiment = SENTIMENT_META[h.sentiment];
+  const thesis = THESIS_META[h.thesisStatus];
+  const action = ACTION_META[h.action];
+  const thesisPct = { intact: 100, shaky: 55, broken: 18 }[h.thesisStatus] ?? 55;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center backdrop-blur-sm sm:p-6" style={{ background: 'rgba(3,3,5,0.6)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()}
+        className="bloom w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-3"
+        style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)' }}>
+
+        <div className="flex items-start justify-between px-2 pt-2 pb-3">
+          <div className="flex items-center gap-3">
+            <Mark mono={h.mono} hue={h.hue} size="lg" />
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-medium text-[15px] tracking-tight">{h.symbol}</h3>
+                <Pill tone={action.tone} dot>{action.label}</Pill>
+              </div>
+              <p className="text-[11px] text-faint mt-0.5">{h.name} · {h.sector}</p>
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="w-11 h-11 -mr-1 -mt-1 rounded-full flex items-center justify-center text-muted hover:text-current transition-colors"><Icon.close /></button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+          {/* hero — price + interactive trend, with the stock's own mood as a watermark */}
+          <div className="col-span-2 sm:col-span-4 sm:row-span-2 surface rounded-2xl p-4 relative overflow-hidden flex flex-col">
+            {positive
+              ? <Bull active className="absolute" style={{ right: 8, top: 8, width: 104 }} />
+              : <Bear active className="absolute" style={{ right: 8, top: 8, width: 104 }} />}
+            <div className="flex items-baseline gap-2.5 flex-wrap relative z-10">
+              <p className="text-[26px] num font-medium tracking-tight leading-none">{fmtINR(h.ltp)}</p>
+              <Delta value={dayChange ?? 0} precision={2} />
+              <span className="text-[10.5px] num text-faint">today</span>
+            </div>
+            <div className="flex items-center gap-2 mt-2 relative z-10">
+              <span className="text-[12px] num" style={{ color: positive ? 'var(--up)' : 'var(--down)' }}>{fmtSigned(Math.round(pnl))}</span>
+              <Delta value={pnlPct} />
+              <span className="text-[10px] text-faint">all-time on {fmtINR(Math.round(invested))}</span>
+            </div>
+            <div className="flex-1 mt-3">
+              <LineChart data={trend} period={period} fmt={v => fmtINR(Math.round(v))} height={200} accent="auto" />
+            </div>
+          </div>
+
+          <GaugeTile className="sm:col-span-2" label="Sentiment" value={h.sentimentScore} tone={sentiment.tone} sub={sentiment.label} />
+          <AlphaTile className="sm:col-span-2" alpha={h.alpha} />
+
+          {/* thesis health */}
+          <div className="col-span-2 sm:col-span-4 surface rounded-2xl p-4 flex flex-col">
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] uppercase tracking-[0.1em] text-faint font-semibold">Why you bought · {new Date(h.buyDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</p>
+              <Pill tone={thesis.tone} dot>{thesis.label}</Pill>
+            </div>
+            <p className="text-[12px] leading-[1.6] mt-2 text-muted flex-1">{h.thesis}</p>
+            <div className="h-[5px] rounded-full mt-3" style={{ background: 'var(--surface-2)' }}>
+              <div className="h-full rounded-full" style={{ width: `${thesisPct}%`, background: `var(--${thesis.tone})`, opacity: 0.8 }}></div>
+            </div>
+          </div>
+
+          <TaxRingTile className="sm:col-span-2" h={h} />
+          <PositionTile className="sm:col-span-2" h={h} />
+
+          {/* news */}
+          <div className="col-span-2 sm:col-span-4 surface rounded-2xl p-4">
+            <p className="text-[9px] uppercase tracking-[0.1em] text-faint font-semibold">What's moving it</p>
+            {(h.news || []).map((n, i) => (
+              <div key={i} className="flex items-start gap-2.5 py-2.5" style={i < h.news.length - 1 ? { borderBottom: '1px solid var(--border)' } : {}}>
+                <span className="text-[8.5px] font-semibold uppercase tracking-[0.08em] px-1.5 py-[2px] rounded whitespace-nowrap mt-[2px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{n.tag}</span>
+                <div>
+                  <p className="text-[12px] leading-[1.5] text-muted">{n.text}</p>
+                  <p className="text-[9.5px] num text-faint mt-0.5">{n.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* verdict + horizon */}
+          <div className="col-span-2 sm:col-span-6 surface rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="rounded-xl px-3 py-2.5 flex items-center gap-2 sm:flex-1" style={{ background: `var(--${action.tone}-soft)` }}>
+              <span className="w-1.5 h-1.5 rounded-full pulse-dot shrink-0" style={{ background: `var(--${action.tone})`, color: `var(--${action.tone})` }}></span>
+              <p className="text-[11.5px] font-medium" style={{ color: `var(--${action.tone})` }}>{action.long}</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(h.events || []).map((e, i) => {
+                const tone = { earnings: 'accent', dividend: 'accent', corporate: 'warn', risk: 'down' }[e.type] || 'accent';
+                return (
+                  <span key={i} className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10.5px] font-medium"
+                    style={{ background: `var(--${tone}-soft)`, color: `var(--${tone})` }}>
+                    <Icon.cal /> {e.label} · <span className="num">{e.date}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================== ADD MODAL ================================== */
 function AddHoldingModal({ onClose, onAdd }) {
   const [mode, setMode] = useState('search');
@@ -2502,8 +2891,9 @@ function App() {
   const baseHoldings = investorMode === 'active' ? liveHoldings : demoHoldings;
   const setBaseHoldings = investorMode === 'active' ? setLiveHoldings : setDemoHoldings;
   const [active, setActive] = useState(null);
+  const [bento, setBento] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [tab, setTab] = useState('today');
+  const [tab, setTab] = useState('canvas');
   const [filter, setFilter] = useState('all');
   const [toast, setToast] = useState(null);
   const [period, setPeriod] = useState(investorMode === 'active' ? '1W' : '1Y');
@@ -2654,6 +3044,7 @@ function App() {
   const filters = [['all', 'All'], ['hold', 'Looking good'], ['watch', 'Watching'], ['review', 'Needs review']];
   const periods = ['1D', '1W', '1M', '3M', 'YTD', '1Y', 'All'];
   const dockItems = [
+    ['canvas', 'Canvas', Icon.canvas],
     ['today', 'Today', Icon.home],
     ['holdings', 'Holdings', Icon.list],
     ['tax', 'Tax', Icon.percent],
@@ -2707,6 +3098,11 @@ function App() {
       </div>
 
       <main className="max-w-6xl mx-auto px-5 sm:px-8 relative z-10">
+
+        {tab === 'canvas' && (
+          <CanvasView holdings={holdings} trends={trends} totals={totals} marketMood={marketMood}
+            onOpen={setBento} onAdd={() => setShowAdd(true)} />
+        )}
 
         {tab === 'today' && (
           <div className="fade-up">
@@ -3021,6 +3417,8 @@ function App() {
       </nav>
 
       {active && <HoldingDetail h={active} trend={trends[active.id]?.series || genTrend(active.id, active.ltp)} onClose={() => setActive(null)} />}
+      {bento && <StockBento h={bento} trend={trends[bento.id]?.series || genTrend(bento.id, bento.ltp)}
+        dayChange={trends[bento.id]?.dayChange} period={period} onClose={() => setBento(null)} />}
       {showAdd && <AddHoldingModal onClose={() => setShowAdd(false)} onAdd={handleAdd} />}
 
       {toast && (
