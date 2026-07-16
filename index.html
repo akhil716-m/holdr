@@ -158,6 +158,9 @@
   @keyframes floaty { from { transform: translateY(-5px); } to { transform: translateY(5px); } }
   .orb { position: relative; display: block; border-radius: 9999px; cursor: pointer; transition: transform .25s cubic-bezier(.2,.7,.2,1); }
   .orb:hover { transform: scale(1.07); }
+  /* ambient hue bloom behind each orb — brightens on hover */
+  .orb-glow { position: absolute; inset: -22%; border-radius: 9999px; filter: blur(16px); opacity: .45; transition: opacity .3s ease; pointer-events: none; }
+  .orb:hover .orb-glow { opacity: .9; }
   .orb-tip {
     position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%) translateY(4px);
     opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease;
@@ -2305,18 +2308,33 @@ function CanvasNode({ h, x, y, size, dur, delay, dayChange, spark, onOpen }) {
     <div className="node-wrap" style={{ left: `${x}%`, top: `${y}%` }}>
       <div className="node-float" style={{ animationDuration: `${dur.toFixed(1)}s`, animationDelay: `-${delay.toFixed(1)}s` }}>
         <button onClick={() => onOpen(h)} className="orb ring-focus" style={{ width: size, height: size }} aria-label={`${h.name} — open details`}>
-          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 -rotate-90">
-            <circle cx={size / 2} cy={size / 2} r={R} fill="none" stroke="var(--border-strong)" strokeWidth="1.5" opacity="0.5" />
-            <circle cx={size / 2} cy={size / 2} r={R} fill="none" stroke={`var(--${tone})`} strokeWidth="2" strokeLinecap="round"
-              strokeDasharray={`${(C * score) / 100} ${C}`} opacity="0.85" />
+          <span className="orb-glow" style={{ background: `radial-gradient(circle at 50% 62%, ${h.hue}44, transparent 66%)` }}></span>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 -rotate-90" style={{ overflow: 'visible' }}>
+            <circle cx={size / 2} cy={size / 2} r={R} fill="none" stroke="var(--border-strong)" strokeWidth="2" opacity="0.35" />
+            <circle cx={size / 2} cy={size / 2} r={R} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+              strokeDasharray={`${(C * score) / 100} ${C}`}
+              style={{ color: `var(--${tone})`, filter: 'drop-shadow(0 0 4px currentColor)', opacity: 0.9 }} />
           </svg>
-          <span className="absolute rounded-full surface flex flex-col items-center justify-center" style={{ inset: 7 }}>
-            <span className="font-mono font-semibold leading-none" style={{ color: h.hue, fontSize: size >= 88 ? 11 : 9.5 }}>
+          {/* lit sphere — top sheen, bottom hue bloom, soft inner shadow */}
+          <span className="absolute rounded-full flex flex-col items-center justify-center" style={{
+            inset: 7,
+            background: `radial-gradient(circle at 32% 22%, rgba(255,255,255,0.09), transparent 52%),
+              radial-gradient(circle at 50% 120%, ${h.hue}3C, transparent 64%),
+              linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.12)), var(--surface)`,
+            border: `1px solid ${h.hue}2E`,
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -10px 22px rgba(0,0,0,0.32), 0 8px 22px -10px rgba(0,0,0,0.55)`,
+          }}>
+            <span className="font-mono font-semibold leading-none tracking-wide" style={{ color: h.hue, fontSize: size >= 88 ? 11.5 : 10, textShadow: `0 0 12px ${h.hue}66` }}>
               {size >= 88 ? h.symbol : h.mono}
             </span>
-            <span className="num leading-none mt-1" style={{ fontSize: 9, color: day >= 0 ? 'var(--up)' : 'var(--down)' }}>
-              {day >= 0 ? '+' : ''}{day.toFixed(1)}%
+            <span className="num font-medium leading-none mt-1.5" style={{ fontSize: size >= 88 ? 10 : 9, color: day >= 0 ? 'var(--up)' : 'var(--down)' }}>
+              {day >= 0 ? '▲' : '▼'} {Math.abs(day).toFixed(1)}%
             </span>
+            {size >= 84 && (
+              <span className="mt-1.5 opacity-80">
+                <Sparkline data={spark} id={`orbspark-${h.id}`} width={Math.round(size * 0.42)} height={11} mono={false} positive={spark[spark.length - 1] >= spark[0]} />
+              </span>
+            )}
           </span>
           {h.action === 'review' && (
             <span className="absolute w-1.5 h-1.5 rounded-full pulse-dot" style={{ top: 4, right: 4, background: 'var(--down)', color: 'var(--down)' }}></span>
