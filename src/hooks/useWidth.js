@@ -6,6 +6,7 @@ export function useWidth(initial = 600) {
   const [width, setWidth] = useState(initial);
   useLayoutEffect(() => {
     if (!ref.current) return;
+    setWidth(Math.max(120, Math.round(ref.current.clientWidth))); // measure now, don't wait for the observer
     const ro = new ResizeObserver(([e]) => setWidth(Math.max(120, Math.round(e.contentRect.width))));
     ro.observe(ref.current);
     return () => ro.disconnect();

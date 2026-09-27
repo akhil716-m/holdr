@@ -1,281 +1,244 @@
-import { useId, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWidth } from '../hooks/useWidth';
-import { fmtINR, fmtPct, fmtSignedINR, toneColor } from '../lib/format';
+import { resample } from '../lib/seed';
+
+/*
+  Charts in the tape language: plotted into a grid of character cells, like the creature.
+  A series is drawn with line glyphs (─ ╱ ╲ │), a comparison series with dots (·),
+  reference levels with a dashed row (╌). Labels sit in the same monospace grid.
+*/
+
+const FONT = 11;
+const CH = 14;
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+const resolve = c => (c && c.startsWith('var(') ? cssVar(c.slice(4, -1)) : c);
 
 const tickFormat = period => t => {
   const d = new Date(t);
   if (period === '1D') return d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
   if (period === '1W') return d.toLocaleDateString('en-IN', { weekday: 'short' });
-  if (period === '1Y' || period === 'YTD') return d.toLocaleDateString('en-IN', { month: 'short' });
+  if (period === '1Y' || period === 'YTD') return d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 };
-const longDate = (period, t) => {
+export const longDate = (period, t) => {
   const d = new Date(t);
   return period === '1D' || period === '1W'
     ? d.toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
     : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-function useHover(n, width, padL, innerW) {
-  const [i, setI] = useState(null);
-  const handlers = {
-    onPointerMove: e => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left - padL;
-      setI(Math.max(0, Math.min(n - 1, Math.round((x / innerW) * (n - 1)))));
-    },
-    onPointerLeave: () => setI(null),
-  };
-  return [i, handlers];
+function useCellWidth() {
+  const [cw, setCw] = useState(6.6);
+  useEffect(() => {
+    const measure = () => {
+      const ctx = document.createElement('canvas').getContext('2d');
+      ctx.font = `${FONT}px "Geist Mono Variable", ui-monospace, monospace`;
+      setCw(ctx.measureText('0').width || 6.6);
+    };
+    measure();
+    document.fonts?.ready.then(measure);
+  }, []);
+  return cw;
 }
 
-function Tooltip({ x, width, children }) {
-  const flip = x > width * 0.62;
-  return (
-    <div
-      className="absolute top-0 pointer-events-none z-10 rounded-[10px] bg-surface-3 border border-line-strong px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.7)]"
-      style={{ left: x, transform: flip ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)' }}
-    >
-      {children}
-    </div>
-  );
-}
+/*
+  lines: [{ data, color, style: 'line' | 'dots' }]  (the first line is the main one)
+  reference: { value, label }  optional level drawn as a dashed row
+  tooltip: index -> node, index into the main line's original data
+*/
+export function GlyphChart({ lines, times, period = '1M', height = 230, formatY = v => v.toFixed(0), reference, tooltip }) {
+  const [box, width] = useWidth();
+  const canvas = useRef(null);
+  const cw = useCellWidth();
+  const [hover, setHover] = useState(null);
+  const [reveal, setReveal] = useState(0);
+  const main = lines[0].data;
+  const key = `${period}:${main.length}:${main[0]}:${main[main.length - 1]}`;
 
-/* your portfolio against NIFTY 50, both as % change from the start of the period */
-export function ValueChart({ series, benchmark, times, period, height = 240 }) {
-  const [ref, width] = useWidth();
-  const uid = useId().replace(/:/g, '');
-  const padL = 0, padR = 44, padT = 16, padB = 26;
-  const innerW = width - padL - padR, innerH = height - padT - padB;
-  const n = series.length;
-  const p = series.map(v => (v / series[0] - 1) * 100);
-  const b = benchmark ? benchmark.map(v => (v / benchmark[0] - 1) * 100) : null;
-  const all = b ? [...p, ...b, 0] : [...p, 0];
-  let min = Math.min(...all), max = Math.max(...all);
-  const padV = (max - min) * 0.12 || 1;
-  min -= padV; max += padV;
-  const x = i => padL + (i / (n - 1)) * innerW;
-  const y = v => padT + (1 - (v - min) / (max - min)) * innerH;
-  const line = arr => arr.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
-  const [hi, hover] = useHover(n, width, padL, innerW);
+  /* draw-in: columns appear left to right, once per new series */
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setReveal(1); return; }
+    setReveal(0);
+    const t0 = performance.now();
+    let id;
+    const step = () => {
+      const p = Math.min(1, (performance.now() - t0) / 700);
+      setReveal(p);
+      if (p < 1) id = setTimeout(step, 30);
+    };
+    id = setTimeout(step, 30);
+    return () => clearTimeout(id);
+  }, [key]);
 
-  const step = niceStep((max - min) / 3);
-  const ticks = [];
-  for (let v = Math.ceil(min / step) * step; v <= max; v += step) ticks.push(v);
-  const fmtTick = tickFormat(period);
-  const xLabels = times ? [0, Math.round((n - 1) / 3), Math.round((2 * (n - 1)) / 3), n - 1] : [];
-  const up = p[n - 1] >= 0;
-
-  return (
-    <div ref={ref} className="relative w-full select-none touch-pan-y" style={{ height }} {...hover}>
-      <svg width={width} height={height} className="block overflow-visible">
-        <defs>
-          <linearGradient id={`vf-${uid}`} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="var(--chart-line)" stopOpacity="0.14" />
-            <stop offset="1" stopColor="var(--chart-line)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {ticks.map(v => (
-          <g key={v}>
-            <line x1={padL} x2={padL + innerW} y1={y(v)} y2={y(v)} stroke={Math.abs(v) < 1e-9 ? 'var(--line-strong)' : 'var(--line)'} />
-            <text x={width - 4} y={y(v) + 4} textAnchor="end" fontSize="11" fill="var(--text-3)" className="num">{fmtPct(v, Math.abs(step) < 1 ? 1 : 0)}</text>
-          </g>
-        ))}
-        {xLabels.map((i, k) => (
-          <text key={k} x={x(i)} y={height - 6} fontSize="11" fill="var(--text-3)" textAnchor={k === 0 ? 'start' : k === xLabels.length - 1 ? 'end' : 'middle'}>
-            {fmtTick(times[i])}
-          </text>
-        ))}
-        <path d={`${line(p)}L${x(n - 1)},${padT + innerH}L${x(0)},${padT + innerH}Z`} fill={`url(#vf-${uid})`} />
-        {b && <path d={line(b)} stroke="var(--chart-bench)" strokeWidth="1.5" strokeDasharray="3 4" fill="none" />}
-        <path key={period + n} d={line(p)} pathLength="1" className="chart-draw" stroke="var(--chart-line)" strokeWidth="1.8" fill="none" strokeLinejoin="round" strokeLinecap="round" />
-        {hi != null ? (
-          <g>
-            <line x1={x(hi)} x2={x(hi)} y1={padT} y2={padT + innerH} stroke="var(--line-strong)" />
-            {b && <circle cx={x(hi)} cy={y(b[hi])} r="3" fill="var(--chart-bench)" />}
-            <circle cx={x(hi)} cy={y(p[hi])} r="4" fill="var(--chart-line)" stroke="var(--surface)" strokeWidth="2" />
-          </g>
-        ) : (
-          <circle cx={x(n - 1)} cy={y(p[n - 1])} r="3.5" fill={up ? 'var(--up)' : 'var(--down)'} />
-        )}
-      </svg>
-      {hi != null && (
-        <Tooltip x={x(hi)} width={width}>
-          {times && <p className="text-[11px] text-ink-3 whitespace-nowrap">{longDate(period, times[hi])}</p>}
-          <p className="text-[13px] num font-medium whitespace-nowrap mt-0.5">
-            {fmtINR(Math.round(series[hi]))} <span style={{ color: toneColor(p[hi]) }}>{fmtPct(p[hi])}</span>
-          </p>
-          {b && <p className="text-[12px] num text-ink-2 whitespace-nowrap">NIFTY 50 <span style={{ color: toneColor(b[hi]) }}>{fmtPct(b[hi])}</span></p>}
-        </Tooltip>
-      )}
-    </div>
-  );
-}
-
-function niceStep(raw) {
-  const pow = 10 ** Math.floor(Math.log10(Math.abs(raw) || 1));
-  const n = raw / pow;
-  return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * pow;
-}
-
-/* single price series with an optional reference line (your average buy price) */
-export function PriceChart({ series, times, period, format = v => fmtINR(v, 2), reference, height = 220 }) {
-  const [ref, width] = useWidth();
-  const uid = useId().replace(/:/g, '');
-  const padR = 64, padT = 14, padB = 26;
-  const innerW = width - padR, innerH = height - padT - padB;
-  const n = series.length;
-  const vals = reference ? [...series, reference.value] : series;
+  const labelCols = 10;
+  const cols = Math.max(10, Math.floor(width / cw) - labelCols);
+  const rows = Math.max(4, Math.floor(height / CH) - 1);
+  const series = lines.map(l => ({ ...l, pts: resample(l.data, cols) }));
+  const vals = series.flatMap(s => s.pts).concat(reference ? [reference.value] : []);
   let min = Math.min(...vals), max = Math.max(...vals);
-  const pad = (max - min) * 0.1 || max * 0.01;
+  const pad = (max - min) * 0.06 || Math.abs(max) * 0.01 || 1;
   min -= pad; max += pad;
-  const x = i => (i / (n - 1)) * innerW;
-  const y = v => padT + (1 - (v - min) / (max - min)) * innerH;
-  const d = series.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
-  const [hi, hover] = useHover(n, width, 0, innerW);
-  const up = series[n - 1] >= series[0];
-  const col = up ? 'var(--up)' : 'var(--down)';
-  const fmtTick = tickFormat(period);
-  const xLabels = times ? [0, Math.round((n - 1) / 2), n - 1] : [];
+  const rowOf = v => ((max - v) / (max - min)) * (rows - 1);
+
+  useEffect(() => {
+    const el = canvas.current;
+    if (!el || !width) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    el.width = width * dpr; el.height = height * dpr;
+    el.style.width = width + 'px'; el.style.height = height + 'px';
+    const ctx = el.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.font = `${FONT}px "Geist Mono Variable", ui-monospace, monospace`;
+    ctx.textBaseline = 'top';
+    const put = (ch, c, r, color, alpha = 1) => { ctx.globalAlpha = alpha; ctx.fillStyle = color; ctx.fillText(ch, c * cw, r * CH); };
+    const faint = cssVar('--line-2'), dim = cssVar('--text-3');
+    const shown = Math.ceil(cols * reveal);
+    const taken = new Set();
+
+    if (reference) {
+      const r = Math.round(rowOf(reference.value));
+      for (let c = 0; c < cols; c++) put('╌', c, r, dim, 0.7);
+    }
+
+    /* braille plotting: every cell is a 2 x 4 grid of dots, so lines stay smooth but remain text */
+    const BIT = [[0x01, 0x08], [0x02, 0x10], [0x04, 0x20], [0x40, 0x80]];
+    const cells = new Map(); // "c:r" -> { bits, color, main }
+    const plot = (x, y, color, isMain) => {
+      const c = Math.floor(x / 2), r = Math.floor(y / 4);
+      if (c < 0 || r < 0 || c >= shown || r >= rows) return;
+      const k = c + ':' + r;
+      const cell = cells.get(k) || { bits: 0, color, main: false };
+      cell.bits |= BIT[y % 4][x % 2];
+      if (isMain) { cell.color = color; cell.main = true; }
+      cells.set(k, cell);
+    };
+    /* draw comparison series first, so the main line wins shared cells */
+    [...series].reverse().forEach(s => {
+      const isMain = s === series[0];
+      const col = resolve(s.color) || cssVar('--text');
+      const pts = resample(s.data, cols * 2);
+      const yOf = v => Math.round(((max - v) / (max - min)) * (rows * 4 - 1));
+      let prev = null;
+      pts.forEach((v, x) => {
+        const y = yOf(v);
+        if (s.style === 'dots') { if (x % 3 === 0) plot(x, y, col, false); return; }
+        if (prev != null) for (let k = Math.min(prev, y); k <= Math.max(prev, y); k++) plot(x, k, col, isMain);
+        else plot(x, y, col, isMain);
+        prev = y;
+      });
+    });
+    /* each set bit becomes a small square dot at its sub-cell position: the braille grid,
+       drawn directly so it stays crisp in any font */
+    const dot = Math.max(1.4, Math.min(cw / 2, CH / 4) * 0.62);
+    cells.forEach((cell, k) => {
+      const [c, r] = k.split(':').map(Number);
+      ctx.globalAlpha = cell.main ? 1 : 0.8;
+      ctx.fillStyle = cell.color;
+      BIT.forEach((row, yy) => row.forEach((b, xx) => {
+        if (cell.bits & b) ctx.fillRect(c * cw + (xx + 0.5) * (cw / 2) - dot / 2, r * CH + (yy + 0.5) * (CH / 4) - dot / 2, dot, dot);
+      }));
+      taken.add(k);
+    });
+
+    [0, Math.floor((rows - 1) / 2), rows - 1].forEach(r => {
+      put(formatY(max - (r / (rows - 1)) * (max - min)).padStart(9), cols, r, dim);
+    });
+    if (reference) put(` ${reference.label}`, cols, Math.round(rowOf(reference.value)), cssVar('--text-2'));
+
+    if (times && times.length > 1) {
+      const fmt = tickFormat(period);
+      const labels = [0, 0.5, 1].map(f => fmt(times[Math.round(f * (times.length - 1))]));
+      put(labels[0], 0, rows, dim);
+      put(labels[1], Math.floor(cols / 2 - labels[1].length / 2), rows, dim);
+      put(labels[2], cols - labels[2].length, rows, dim);
+    }
+
+    if (hover != null) {
+      for (let r = 0; r < rows; r++) if (!taken.has(hover + ':' + r)) put('┊', hover, r, dim, 0.7);
+      put('█', hover, Math.round(rowOf(series[0].pts[hover])), resolve(series[0].color) || cssVar('--text'));
+    }
+    ctx.globalAlpha = 1;
+    // everything drawn is derived from these inputs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, height, key, reveal, hover, cw, reference?.value]);
+
+  const onMove = e => {
+    const c = Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / cw);
+    setHover(c >= 0 && c < cols ? c : null);
+  };
+  const dataIndex = hover == null ? null : Math.round((hover / (cols - 1)) * (main.length - 1));
 
   return (
-    <div ref={ref} className="relative w-full select-none touch-pan-y" style={{ height }} {...hover}>
-      <svg width={width} height={height} className="block overflow-visible">
-        <defs>
-          <linearGradient id={`pf-${uid}`} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor={col} stopOpacity="0.16" />
-            <stop offset="1" stopColor={col} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <line x1="0" x2={innerW} y1={padT + innerH} y2={padT + innerH} stroke="var(--line)" />
-        {[max - pad, min + pad].filter(v => !reference || Math.abs(y(v) - y(reference.value)) > 16).map((v, k) => (
-          <text key={k} x={width - 2} y={y(v) + 4} textAnchor="end" fontSize="11" fill="var(--text-3)" className="num">{format(v)}</text>
-        ))}
-        {xLabels.map((i, k) => (
-          <text key={k} x={x(i)} y={height - 6} fontSize="11" fill="var(--text-3)" textAnchor={k === 0 ? 'start' : k === 2 ? 'end' : 'middle'}>{fmtTick(times[i])}</text>
-        ))}
-        {reference && (
-          <g>
-            <line x1="0" x2={innerW} y1={y(reference.value)} y2={y(reference.value)} stroke="var(--text-3)" strokeDasharray="2 4" />
-            <text x={8} y={y(reference.value) - 6} fontSize="11" fill="var(--text-2)">{reference.label} {format(reference.value)}</text>
-          </g>
-        )}
-        <path d={`${d}L${x(n - 1)},${padT + innerH}L0,${padT + innerH}Z`} fill={`url(#pf-${uid})`} />
-        <path key={period + n} d={d} pathLength="1" className="chart-draw" stroke={col} strokeWidth="1.8" fill="none" strokeLinejoin="round" />
-        {hi != null && (
-          <g>
-            <line x1={x(hi)} x2={x(hi)} y1={padT} y2={padT + innerH} stroke="var(--line-strong)" />
-            <circle cx={x(hi)} cy={y(series[hi])} r="4" fill={col} stroke="var(--surface)" strokeWidth="2" />
-          </g>
-        )}
-      </svg>
-      {hi != null && (
-        <Tooltip x={x(hi)} width={width}>
-          {times && <p className="text-[11px] text-ink-3 whitespace-nowrap">{longDate(period, times[hi])}</p>}
-          <p className="text-[13px] num font-medium whitespace-nowrap mt-0.5">{format(series[hi])}</p>
-        </Tooltip>
+    <div ref={box} className="relative w-full select-none touch-pan-y" style={{ height }} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
+      <canvas ref={canvas} className="absolute inset-0" aria-hidden="true" />
+      {hover != null && tooltip && (
+        <div className="absolute top-0 z-10 pointer-events-none bg-bg border border-line-2 px-2.5 py-1.5 whitespace-nowrap"
+          style={{ left: hover * cw, transform: hover > cols * 0.6 ? 'translateX(calc(-100% - 10px))' : 'translateX(14px)' }}>
+          {tooltip(dataIndex)}
+        </div>
       )}
     </div>
   );
 }
 
-export function Sparkline({ data, width = 72, height = 24 }) {
-  if (!data || data.length < 2) return <span style={{ width, height }} className="inline-block" />;
-  const min = Math.min(...data), max = Math.max(...data), r = max - min || 1;
-  const d = data.map((v, i) => `${i ? 'L' : 'M'}${((i / (data.length - 1)) * width).toFixed(1)},${(height - 2 - ((v - min) / r) * (height - 4)).toFixed(1)}`).join('');
-  return (
-    <svg width={width} height={height} className="shrink-0 overflow-visible" aria-hidden="true">
-      <path d={d} stroke="var(--text-3)" strokeWidth="1.3" fill="none" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/* which holdings moved your money today, in rupees, gains right and losses left */
-export function ContributionBars({ rows, onOpen }) {
-  const sorted = [...rows].sort((a, b) => b.dayMove - a.dayMove);
-  const maxAbs = Math.max(...sorted.map(r => Math.abs(r.dayMove)), 1);
-  return (
-    <ul className="flex flex-col">
-      {sorted.map(r => {
-        const w = (Math.abs(r.dayMove) / maxAbs) * 100;
-        const pos = r.dayMove >= 0;
-        return (
-          <li key={r.id}>
-            <button onClick={() => onOpen(r)} className="row-hover w-full grid grid-cols-[88px_1fr_88px] sm:grid-cols-[120px_1fr_104px] items-center gap-3 py-2 px-2 -mx-2 rounded-[10px] text-left">
-              <span className="text-[13px] font-medium truncate">{r.symbol}</span>
-              <span className="relative h-5 grid grid-cols-2" aria-hidden="true">
-                <span className="relative border-r border-line-strong">
-                  {!pos && <span className="absolute right-0 top-1/2 -translate-y-1/2 h-2.5 rounded-l-full" style={{ width: `${w}%`, background: 'var(--down)', opacity: 0.85 }} />}
-                </span>
-                <span className="relative">
-                  {pos && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-2.5 rounded-r-full" style={{ width: `${w}%`, background: 'var(--up)', opacity: 0.85 }} />}
-                </span>
-              </span>
-              <span className="text-[13px] num text-right" style={{ color: toneColor(r.dayMove) }}>{fmtSignedINR(r.dayMove)}</span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/* net FII and DII activity per day, buying above the line and selling below */
-export function FlowBars({ history, height = 180 }) {
-  const [ref, width] = useWidth();
+/* net FII and DII per day as glyph columns: buying above the line, selling below.
+   FII is drawn with █ and DII with ▒, so the two read apart without extra colours. */
+export function FlowColumns({ history, height = 154 }) {
+  const [box, width] = useWidth();
+  const canvas = useRef(null);
+  const cw = useCellWidth();
+  const [hover, setHover] = useState(null);
   const n = history.length;
-  const padT = 8, padB = 24, padL = 44;
-  const innerW = width - padL, innerH = height - padT - padB;
-  const maxAbs = Math.max(...history.flatMap(d => [Math.abs(d.fii.net), Math.abs(d.dii.net)]), 1);
-  const top = Math.ceil(maxAbs / 1000) * 1000;
-  const zero = padT + innerH / 2;
-  const yh = v => (v / top) * (innerH / 2);
-  const slot = innerW / n;
-  const bw = Math.max(2, Math.min(9, slot * 0.3));
-  const [hi, setHi] = useState(null);
-  const fmtK = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.round(Math.abs(v) / 1000) + 'k';
-  const cr = v => (v >= 0 ? '+' : '−') + '₹' + Math.round(Math.abs(v)).toLocaleString('en-IN') + ' cr';
+  const slot = Math.max(3, Math.floor(width / cw / n));
 
+  useEffect(() => {
+    const el = canvas.current;
+    if (!el || !width) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    el.width = width * dpr; el.height = height * dpr;
+    el.style.width = width + 'px'; el.style.height = height + 'px';
+    const ctx = el.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.font = `${FONT}px "Geist Mono Variable", ui-monospace, monospace`;
+    ctx.textBaseline = 'top';
+    const rows = Math.floor(height / CH) - 1;
+    const mid = Math.floor(rows / 2);
+    const maxAbs = Math.max(...history.flatMap(d => [Math.abs(d.fii.net), Math.abs(d.dii.net)]), 1);
+    const put = (ch, c, r, color, a = 1) => { ctx.globalAlpha = a; ctx.fillStyle = color; ctx.fillText(ch, c * cw, r * CH); };
+    const up = cssVar('--up'), down = cssVar('--down'), dim = cssVar('--text-3'), faint = cssVar('--line-2');
+    for (let c = 0; c < Math.floor(width / cw); c++) put('┈', c, mid, faint);
+    history.forEach((d, i) => {
+      const a = hover == null || hover === i ? 1 : 0.3;
+      [[d.fii.net, '█', 0], [d.dii.net, '▒', 1]].forEach(([v, g, off]) => {
+        const h = Math.max(1, Math.round((Math.abs(v) / maxAbs) * mid));
+        for (let k = 1; k <= h; k++) put(g, i * slot + off, v >= 0 ? mid - k : mid + k, v >= 0 ? up : down, a);
+      });
+    });
+    const f = x => x.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const last = f(history[n - 1].date);
+    put(f(history[0].date), 0, rows, dim);
+    put(last, Math.max(0, (n - 1) * slot + 2 - last.length), rows, dim);
+    ctx.globalAlpha = 1;
+  }, [width, height, history, hover, n, cw, slot]);
+
+  const cr = v => (v >= 0 ? '+' : '−') + '₹' + Math.round(Math.abs(v)).toLocaleString('en-IN') + ' cr';
   return (
-    <div
-      ref={ref}
-      className="relative w-full select-none touch-pan-y"
-      style={{ height }}
+    <div ref={box} className="relative w-full select-none touch-pan-y" style={{ height }}
       onPointerMove={e => {
-        const r = e.currentTarget.getBoundingClientRect();
-        setHi(Math.max(0, Math.min(n - 1, Math.floor((e.clientX - r.left - padL) / slot))));
+        const i = Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / (slot * cw));
+        setHover(i >= 0 && i < n ? i : null);
       }}
-      onPointerLeave={() => setHi(null)}
-    >
-      <svg width={width} height={height} className="block">
-        {[top, 0, -top].map(v => (
-          <g key={v}>
-            <line x1={padL} x2={width} y1={zero - yh(v)} y2={zero - yh(v)} stroke={v === 0 ? 'var(--line-strong)' : 'var(--line)'} />
-            <text x={0} y={zero - yh(v) + 4} fontSize="11" fill="var(--text-3)" className="num">{v === 0 ? '0' : fmtK(v)}</text>
-          </g>
-        ))}
-        {history.map((d, i) => {
-          const cx = padL + slot * i + slot / 2;
-          const dim = hi != null && hi !== i ? 0.35 : 1;
-          return (
-            <g key={i} opacity={dim}>
-              <rect x={cx - bw - 1} width={bw} rx="2" fill="var(--text-2)" y={d.fii.net >= 0 ? zero - yh(d.fii.net) : zero} height={Math.max(1.5, Math.abs(yh(d.fii.net)))} />
-              <rect x={cx + 1} width={bw} rx="2" fill="var(--accent)" y={d.dii.net >= 0 ? zero - yh(d.dii.net) : zero} height={Math.max(1.5, Math.abs(yh(d.dii.net)))} />
-            </g>
-          );
-        })}
-        {[0, n - 1].map((i, k) => (
-          <text key={k} x={padL + slot * i + slot / 2} y={height - 6} fontSize="11" fill="var(--text-3)" textAnchor={k ? 'end' : 'start'}>
-            {history[i].date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-          </text>
-        ))}
-      </svg>
-      {hi != null && (
-        <Tooltip x={padL + slot * hi + slot / 2} width={width}>
-          <p className="text-[11px] text-ink-3 whitespace-nowrap">{history[hi].date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
-          <p className="text-[12px] num whitespace-nowrap mt-0.5">Foreign <span style={{ color: toneColor(history[hi].fii.net) }}>{cr(history[hi].fii.net)}</span></p>
-          <p className="text-[12px] num whitespace-nowrap">Domestic <span style={{ color: toneColor(history[hi].dii.net) }}>{cr(history[hi].dii.net)}</span></p>
-        </Tooltip>
+      onPointerLeave={() => setHover(null)}>
+      <canvas ref={canvas} className="absolute inset-0" aria-hidden="true" />
+      {hover != null && (
+        <div className="absolute top-0 right-0 z-10 pointer-events-none bg-bg border border-line-2 px-2.5 py-1.5 whitespace-nowrap">
+          <p className="label">{history[hover].date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+          <p>█ Foreign <span style={{ color: history[hover].fii.net >= 0 ? 'var(--up)' : 'var(--down)' }}>{cr(history[hover].fii.net)}</span></p>
+          <p>▒ Domestic <span style={{ color: history[hover].dii.net >= 0 ? 'var(--up)' : 'var(--down)' }}>{cr(history[hover].dii.net)}</span></p>
+        </div>
       )}
     </div>
   );
