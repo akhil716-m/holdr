@@ -1,3 +1,5 @@
 .claude/
 scripts/upstox_config.json
 scripts/.upstox_token.json
+node_modules/
+dist/

@@ -1,33 +1,41 @@
-# Holdr — know what you hold
+# Holdr
 
-A personal portfolio tracker prototype. Single-file React app (`index.html`),
-no build step — open it in a browser.
+Know what you hold: why you bought each stock, whether that reason still holds,
+how it's doing against NIFTY 50 and what it means for your tax. Built for Indian equities.
 
-## Data sources
+Version 2 is a Vite + React app. Version 1 (the single-file prototype) lives on the `version-1` branch.
 
-The app tries sources in this order and falls back gracefully:
-
-1. **Upstox** (official, real-time, free with your account) — via the local bridge below
-2. **Yahoo Finance** (free, unofficial, slightly delayed) — via public CORS proxies
-3. **Demo data** — seeded, always works offline
-
-The header chip shows which source is active: `Live · Upstox`, `Live · Yahoo`, or `Demo data`.
-Macro tiles (USD/INR, gold, silver, crude, VIX) always come from Yahoo.
-
-## Upstox setup (once)
-
-1. Create an app at <https://account.upstox.com/developer/apps>
-   - Redirect URL: `http://localhost:8765/callback`
-2. Copy `scripts/upstox_config.example.json` → `scripts/upstox_config.json`
-   and fill in your `api_key` / `api_secret` (gitignored — never committed).
-
-## Daily use
+## Run it
 
 ```sh
-ruby scripts/upstox_proxy.rb        # start the local bridge
-open http://localhost:8765/login    # authenticate once a day (Upstox tokens expire daily)
-open index.html                     # then use the app
+npm install
+npm run dev        # http://localhost:5173
+npm run build      # production build in dist/
 ```
 
-The bridge keeps your API secret and token on your machine only and adds the
-CORS headers a browser needs. If it isn't running, the app silently uses Yahoo.
+Preview a market mood without waiting for one: add `?mood=bull`, `?mood=bear` or `?mood=flat`
+to the URL, or use Market mood in the profile menu.
+
+## Data
+
+- **Sample portfolio**: illustrative and always labelled. Never mixed with live prices.
+- **Your portfolio**: import a broker CSV/XLSX or add stocks one by one. Stored in this browser only.
+- **Prices**, tried in order:
+  1. Upstox through the local bridge (real time, see below)
+  2. Yahoo Finance through `/api/yahoo` (a Vite dev proxy locally, a Vercel function in production)
+  3. Public CORS proxies as a last resort
+  When nothing answers, Holdr says so and uses the price from your file instead of inventing one.
+- **Market mood** follows NIFTY 50's day change: up 0.25% or more is a bull day, down 0.25% or more a bear day.
+
+## Upstox bridge (optional, for real-time prices)
+
+1. Create an app at <https://account.upstox.com/developer/apps> with redirect URL `http://localhost:8765/callback`.
+2. Copy `scripts/upstox_config.example.json` to `scripts/upstox_config.json` and fill in `api_key` and `api_secret` (gitignored).
+3. Each day:
+
+```sh
+ruby scripts/upstox_proxy.rb
+open http://localhost:8765/login
+```
+
+The bridge keeps your API secret and token on your machine and also serves NSE FII/DII data.
