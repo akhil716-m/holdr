@@ -67,7 +67,7 @@
   --color-mood: var(--mood);
 }
 
-html { background: var(--bg); color-scheme: dark; }
+html { background: var(--bg); color-scheme: dark; overflow-x: clip; }
 body {
   font-family: var(--font-sans);
   background: var(--bg);
@@ -90,6 +90,10 @@ body {
     radial-gradient(60% 40% at 88% -4%, var(--mood-glow-2), transparent 70%);
   transition: background 1.2s ease;
 }
+.atmosphere::after {
+  content: ""; position: absolute; inset: 0; opacity: 0.07; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
 .atmosphere::before {
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px;
   background: linear-gradient(90deg, transparent, var(--mood), transparent);
@@ -102,6 +106,37 @@ body {
 .press:active { transform: scale(0.98); }
 .row-hover { transition: background-color .15s ease; }
 .row-hover:hover { background: var(--surface-2); }
+
+/* editorial display face for the day's headline: a nod to the financial press */
+.font-display { font-family: "Newsreader Variable", Georgia, serif; font-weight: 400; font-optical-sizing: auto; }
+.font-display em { font-style: italic; color: var(--mood); }
+.font-mono-ui { font-family: "Geist Mono Variable", ui-monospace, monospace; }
+
+/* full-bleed hero band with a refracted, mood-tinted light field behind it */
+.hero-band { position: relative; width: 100vw; margin-left: calc(50% - 50vw); overflow: hidden; border-bottom: 1px solid var(--line); }
+.prism { position: absolute; inset: -20% -10% 0 -10%; pointer-events: none; }
+.prism::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    radial-gradient(34% 46% at 72% 40%, color-mix(in oklab, var(--mood) 34%, transparent), transparent 70%),
+    radial-gradient(26% 34% at 88% 18%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(40% 40% at 18% 90%, color-mix(in oklab, var(--mood) 12%, transparent), transparent 70%);
+  filter: blur(40px);
+  transition: background 1.2s ease;
+}
+/* light streaks, like a price board seen through glass */
+.prism::after {
+  content: ""; position: absolute; inset: 0;
+  background: repeating-linear-gradient(90deg,
+    transparent 0 46px,
+    color-mix(in oklab, var(--mood) 10%, transparent) 46px 49px,
+    transparent 49px 83px,
+    color-mix(in oklab, white 5%, transparent) 83px 85px,
+    transparent 85px 128px);
+  filter: blur(5px);
+  -webkit-mask-image: radial-gradient(60% 70% at 70% 40%, #000, transparent 75%);
+  mask-image: radial-gradient(60% 70% at 70% 40%, #000, transparent 75%);
+}
 
 /* skeleton shimmer */
 .skeleton {

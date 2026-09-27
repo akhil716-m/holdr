@@ -4,12 +4,13 @@ import { useHoldr } from '../state';
 import { navigate } from '../hooks/useRoute';
 import { Button, Change, EmptyState, Mark, Segmented, SectionHead } from '../components/ui';
 import { Sparkline } from '../components/charts';
+import { GROUP_LABEL } from '../lib/voice';
 import { fmtCompactINR, fmtINR, fmtPct, fmtSignedINR, toneColor } from '../lib/format';
 
 const GROUPS = [
-  ['review', 'Needs review', r => r.verdict === 'review' || r.thesisStatus === 'broken'],
-  ['watch', 'Watching', r => r.verdict === 'watch' || r.thesisStatus === 'shaky' || !r.thesisStatus],
-  ['hold', 'On track', () => true],
+  ['review', GROUP_LABEL.review, r => r.verdict === 'review' || r.thesisStatus === 'broken'],
+  ['watch', GROUP_LABEL.watch, r => r.verdict === 'watch' || r.thesisStatus === 'shaky' || !r.thesisStatus],
+  ['hold', GROUP_LABEL.hold, () => true],
 ];
 
 function groupRows(rows) {
@@ -64,7 +65,7 @@ function Overview({ rows, total }) {
             </li>
           ))}
         </ul>
-        {counts.unset > 0 && <p className="mt-4 text-[12px] text-ink-3">Write down why you own each stock. Holdr uses it to tell you when something changes.</p>}
+        {counts.unset > 0 && <p className="mt-4 text-[12px] text-ink-3">Write down why you own each one. Holdr can only tell you a reason broke if it knows the reason.</p>}
       </div>
     </section>
   );
@@ -132,7 +133,7 @@ export default function Holdings() {
 
       {!rows.length ? (
         <div className="mt-8 card p-6 sm:p-8">
-          <EmptyState title="No holdings yet" body="Import your broker's holdings file or add stocks one by one." action={<Button onClick={openAdd}>Add holdings</Button>} />
+          <EmptyState title="Nothing here yet" body="Import your broker\u2019s holdings file or add stocks one by one." action={<Button onClick={openAdd}>Add holdings</Button>} />
         </div>
       ) : (
         <>

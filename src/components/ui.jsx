@@ -137,8 +137,8 @@ export class ErrorBoundary extends Component {
     if (!this.state.error) return this.props.children;
     return (
       <div className="max-w-md mx-auto px-4 py-24">
-        <p className="text-[16px] font-medium">Something went wrong on this screen.</p>
-        <p className="text-[13px] text-ink-2 mt-2">Your holdings are safe. Reload to try again.</p>
+        <p className="text-[16px] font-medium">This screen tripped over something.</p>
+        <p className="text-[13px] text-ink-2 mt-2">Your holdings are safe. A reload usually sorts it.</p>
         <Button className="mt-5" onClick={() => window.location.reload()}>Reload</Button>
       </div>
     );

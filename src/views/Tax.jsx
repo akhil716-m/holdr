@@ -118,7 +118,7 @@ export default function Tax() {
   return (
     <div className="view-enter pt-10 md:pt-14">
       <h1 className="text-[28px] md:text-[32px] font-medium tracking-tight">Tax</h1>
-      <p className="text-[14px] text-ink-2 mt-1">{fy.label}, listed equity. Estimates to plan with, not tax advice.</p>
+      <p className="text-[14px] text-ink-2 mt-1">{fy.label}, listed equity. Numbers to plan with, not tax advice.</p>
 
       <section className="mt-8 grid md:grid-cols-[1.3fr_1fr] gap-4">
         <div className="card p-5 sm:p-6">
@@ -156,7 +156,7 @@ export default function Tax() {
       <section className="mt-4 card p-4 sm:p-5">
         <SectionHead title="Moves worth considering" aside="Largest saving first" />
         {moves.length === 0 ? (
-          <p className="mt-3 text-[13px] text-ink-2">No tax moves stand out right now.</p>
+          <p className="mt-3 text-[13px] text-ink-2">No tax moves stand out. Sitting tight is a strategy too.</p>
         ) : (
           <ul className="mt-2">
             {moves.map(m => (

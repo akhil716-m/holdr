@@ -1,80 +1,109 @@
 import { ArrowUpRightIcon } from '@phosphor-icons/react';
 import { useHoldr } from '../state';
-import { navigate, href } from '../hooks/useRoute';
-import MoodMark from '../components/MoodMark';
+import { href, navigate } from '../hooks/useRoute';
+import Creature from '../components/Creature';
 import { ValueChart, ContributionBars } from '../components/charts';
 import { Button, Change, EmptyState, SectionHead, Segmented, Skeleton, SourceStamp } from '../components/ui';
 import { attentionItems } from '../lib/attention';
 import { MOOD_COPY } from '../lib/mood';
+import { dayTake } from '../lib/voice';
 import { PERIODS } from '../lib/market';
-
-const PERIOD_PHRASE = { '1D': 'Today', '1W': 'This week', '1M': 'Over the past month', '3M': 'Over three months', YTD: 'This year', '1Y': 'Over the past year' };
 import { fmtINR, fmtNum, fmtPct, fmtSignedINR, toneColor } from '../lib/format';
-import { greeting, marketSession } from '../lib/dates';
+import { marketSession } from '../lib/dates';
 import { SAMPLE_NEWS, sampleFlows, SAMPLE_VIX } from '../data/sample';
 
+const PERIOD_PHRASE = { '1D': 'Today', '1W': 'This week', '1M': 'Over the past month', '3M': 'Over three months', YTD: 'This year', '1Y': 'Over the past year' };
+
+/* which creature the day gets: real index data only, or a preview the user chose */
+export function useCreature() {
+  const { mood, nifty, market, moodPreview } = useHoldr();
+  if (moodPreview) return { kind: moodPreview === 'flat' ? 'crab' : moodPreview, state: 'preview' };
+  if (market.niftyStatus === 'loading') return { kind: 'crab', state: 'loading' };
+  if (nifty.sample) return { kind: 'quiet', state: 'offline' };
+  return { kind: mood === 'flat' ? 'crab' : mood, state: 'live' };
+}
+
+const HEADLINE = {
+  bull: <>The <em>bull</em> is out.</>,
+  bear: <>The <em>bear</em> is out.</>,
+  crab: <>A <em>crab</em> market.</>,
+  quiet: <>The market has gone <em>quiet</em>.</>,
+  loading: <>Reading the <em>tape</em>.</>,
+};
+
+/* the ticker the creature is drawn with: NIFTY first, then your holdings and their moves */
+function tapeFrom(nifty, rows) {
+  const part = (label, v) => `${v == null ? '' : v >= 0 ? '▲' : '▼'}${label} ${v == null ? '' : fmtPct(v, 2)}  `;
+  return part('NIFTY50', nifty.sample ? null : nifty.dayChg) + rows.map(r => part(r.symbol, r.dayChg)).join('');
+}
+
 function Hero() {
-  const { mood, nifty, market, moodPreview, profile } = useHoldr();
+  const { nifty, portfolio, moodPreview } = useHoldr();
+  const { kind, state } = useCreature();
   const session = marketSession();
-  const known = market.niftyStatus !== 'loading' || moodPreview;
-  const copy = MOOD_COPY[mood];
-  const dir = nifty.dayChg >= 0 ? 'up' : 'down';
   const date = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+  const drawn = kind === 'quiet' ? 'crab' : kind;
+  const color = kind === 'quiet' || state === 'loading' ? 'var(--text-3)' : 'var(--mood)';
+  const moodKey = kind === 'crab' ? 'flat' : kind;
+
+  const fact = state === 'loading' ? 'Fetching NIFTY 50.'
+    : state === 'offline' ? 'Couldn’t reach NIFTY 50. Trying again every two minutes.'
+      : `NIFTY 50 ${session.open ? 'is' : 'closed'} ${nifty.dayChg >= 0 ? 'up' : 'down'} ${fmtPct(Math.abs(nifty.dayChg), 2, false)} at ${fmtNum(nifty.price)}. ${MOOD_COPY[moodKey]?.line || ''}`;
+  const take = dayTake({ kind, state, dayMove: portfolio.totals.dayMove });
 
   return (
-    <section className="relative pt-10 md:pt-14 pb-2">
-      <MoodMark mood={mood} className="hidden md:block absolute right-0 top-6 w-64 pointer-events-none opacity-70" strokeWidth={1.8} />
-      <div className="relative max-w-[640px]">
-        <MoodMark mood={mood} className="md:hidden w-20 h-10 mb-4 opacity-80" strokeWidth={1.6} />
-        <p className="text-[13px] text-ink-3">
-          {greeting()}{profile !== 'You' ? `, ${profile}` : ''}. {date}
-        </p>
-        {known && nifty.sample && !moodPreview ? (
-          <h1 className="mt-3 text-[28px] md:text-[36px] leading-[1.15] font-medium tracking-tight">
-            Live market data is unavailable. <span className="text-ink-2">Your holdings below still add up; the market mood returns with NIFTY.</span>
+    <section className="hero-band">
+      <div className="prism" aria-hidden="true" />
+      <div className="relative max-w-[1120px] mx-auto px-4 sm:px-6 grid md:grid-cols-[1fr_1.05fr] items-center gap-4 md:gap-8 pt-8 md:pt-12 pb-6 md:pb-10">
+        <div className="order-2 md:order-1">
+          <p className="text-[13px] text-ink-2">{date} · {session.label.replace('Market closed for the weekend', 'Weekend, market closed')}</p>
+          <h1 className="font-display mt-4 text-[44px] sm:text-[56px] md:text-[68px] leading-[1.02] tracking-[-0.02em] pb-1">
+            {HEADLINE[state === 'loading' ? 'loading' : kind]}
           </h1>
-        ) : known ? (
-          <h1 className="mt-3 text-[28px] md:text-[36px] leading-[1.15] font-medium tracking-tight">
-            <span style={{ color: 'var(--mood)' }}>{copy.name}.</span>{' '}
-            <span className="text-ink-2">NIFTY 50 {session.open ? 'is' : 'closed'} {dir} {fmtPct(Math.abs(nifty.dayChg), 2, false)} at <span className="num">{fmtNum(nifty.price)}</span>.</span>
-          </h1>
-        ) : (
-          <div className="mt-4 flex flex-col gap-3"><Skeleton className="h-8 w-[80%]" /><Skeleton className="h-8 w-[50%]" /></div>
-        )}
-        <p className="mt-3 text-[13px] text-ink-3">
-          {session.label}. {moodPreview ? `Previewing the ${copy.name.toLowerCase()} look. Switch back to Live from the menu.` : market.niftyStatus === 'loading' ? 'Fetching NIFTY 50...' : nifty.sample ? 'Retrying every two minutes.' : copy.line}
-        </p>
+          <p className="mt-4 text-[15px] text-ink-2 max-w-[46ch] leading-relaxed">{fact}</p>
+          {take && <p className="mt-2 text-[15px] text-ink max-w-[46ch] leading-relaxed">{take}</p>}
+          {moodPreview && <p className="mt-3 text-[12px] text-ink-3">Preview. Switch back to Live from the menu.</p>}
+        </div>
+        <figure className="order-1 md:order-2 m-0">
+          <Creature
+            kind={drawn}
+            tape={tapeFrom(nifty, portfolio.rows)}
+            color={color}
+            dim={kind === 'quiet' || state === 'loading'}
+            className="h-[220px] sm:h-[300px] md:h-[400px]"
+            label={`${kind === 'quiet' ? 'A sleeping crab' : `A ${drawn}`} drawn from today's market numbers`}
+          />
+          <figcaption className="font-mono-ui text-[11px] text-ink-3 text-right mt-1">drawn with today&rsquo;s tape</figcaption>
+        </figure>
       </div>
     </section>
   );
 }
 
 function PortfolioSummary() {
-  const { portfolio, mode, period } = useHoldr();
+  const { portfolio, mode, period, hasMine, setMode, openAdd } = useHoldr();
   const t = portfolio.totals;
   return (
-    <section className="mt-10">
-      <div className="flex items-center gap-2">
+    <div>
+      <div className="flex items-center gap-3 flex-wrap">
         <h2 className="text-[13px] text-ink-2">Your portfolio</h2>
-        {mode === 'sample' && <span className="text-[11px] font-medium px-2 h-5 inline-flex items-center rounded-full bg-surface-3 text-ink-2">Sample</span>}
+        {mode === 'sample' && (
+          <button onClick={hasMine ? () => setMode('mine') : openAdd}
+            className="press text-[12px] font-medium px-2.5 h-6 inline-flex items-center gap-1.5 rounded-full bg-surface-3 text-ink-2 hover:text-ink">
+            Sample <span className="text-ink-3">·</span> <span className="text-accent">{hasMine ? 'Switch to yours' : 'Import yours'}</span>
+          </button>
+        )}
       </div>
-      <p className="mt-1 text-[40px] md:text-[48px] leading-none font-medium tracking-tight num">{fmtINR(Math.round(t.value))}</p>
+      <p className="mt-2 text-[44px] md:text-[56px] leading-none font-medium tracking-tight num">{fmtINR(Math.round(t.value))}</p>
       <p className="mt-3 text-[15px] text-ink-2 max-w-[60ch] leading-relaxed">
-        {t.dayMove != null ? (
-          <>
-            <span style={{ color: toneColor(t.dayMove) }} className="num">{t.dayMove >= 0 ? 'Up' : 'Down'} {fmtINR(Math.abs(Math.round(t.dayMove)))} today ({fmtPct(t.dayPct)})</span>.{' '}
-          </>
-        ) : <>Today's move shows once live prices load. </>}
         {t.periodRet != null && t.niftyRet != null && (
           <>
-            {PERIOD_PHRASE[period]} you're{' '}
-            <span className="num" style={{ color: toneColor(t.periodRet) }}>{fmtPct(t.periodRet)}</span> and NIFTY 50 is{' '}
-            <span className="num" style={{ color: toneColor(t.niftyRet) }}>{fmtPct(t.niftyRet)}</span>.{' '}
+            {PERIOD_PHRASE[period]} you&rsquo;re <span className="num" style={{ color: toneColor(t.periodRet) }}>{fmtPct(t.periodRet)}</span>, NIFTY 50 <span className="num" style={{ color: toneColor(t.niftyRet) }}>{fmtPct(t.niftyRet)}</span>.{' '}
           </>
         )}
-        <span className="text-ink-3">Overall <span className="num" style={{ color: toneColor(t.pnl) }}>{fmtSignedINR(t.pnl)}</span> on {fmtINR(Math.round(t.invested))} invested.</span>
+        <span className="text-ink-3">Overall <span className="num" style={{ color: toneColor(t.pnl) }}>{fmtSignedINR(t.pnl)}</span> on {fmtINR(Math.round(t.invested))}.</span>
       </p>
-    </section>
+    </div>
   );
 }
 
@@ -117,7 +146,7 @@ function NeedsYou() {
     <div className="card p-4 sm:p-5 min-w-0">
       <SectionHead title="Needs you" aside={items.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : null} />
       {shown.length === 0 ? (
-        <p className="mt-4 text-[13px] text-ink-2 leading-relaxed">Nothing needs a decision today. Your theses are holding and there are no tax windows or events coming up.</p>
+        <p className="mt-4 text-[13px] text-ink-2 leading-relaxed">Nothing needs you today. That’s allowed.</p>
       ) : (
         <ul className="mt-3 flex flex-col">
           {shown.map(it => (
@@ -135,22 +164,6 @@ function NeedsYou() {
         </ul>
       )}
       {items.length > shown.length && <a href={href('/holdings')} className="block mt-2 text-[13px] text-accent">See {items.length - shown.length} more in Holdings</a>}
-    </div>
-  );
-}
-
-function MovedToday() {
-  const { portfolio } = useHoldr();
-  const rows = portfolio.rows.filter(r => r.dayMove != null);
-  const t = portfolio.totals;
-  return (
-    <div className="card p-4 sm:p-5 min-w-0">
-      <SectionHead title="What moved your money today" aside={t.dayMove != null ? <span className="num" style={{ color: toneColor(t.dayMove) }}>{fmtSignedINR(t.dayMove)} net</span> : null} />
-      {rows.length ? (
-        <div className="mt-3"><ContributionBars rows={rows} onOpen={r => navigate(`/holdings/${r.id}`)} /></div>
-      ) : (
-        <p className="mt-4 text-[13px] text-ink-2">Day moves appear once live prices load for your holdings.</p>
-      )}
     </div>
   );
 }
@@ -203,29 +216,42 @@ function News() {
   );
 }
 
+function MovedToday() {
+  const { portfolio } = useHoldr();
+  const rows = portfolio.rows.filter(r => r.dayMove != null);
+  const t = portfolio.totals;
+  return (
+    <div className="card p-4 sm:p-5 min-w-0">
+      <SectionHead title="What moved your money today" aside={t.dayMove != null ? <span className="num" style={{ color: toneColor(t.dayMove) }}>{fmtSignedINR(t.dayMove)} net</span> : null} />
+      {rows.length ? (
+        <div className="mt-3"><ContributionBars rows={rows} onOpen={r => navigate(`/holdings/${r.id}`)} /></div>
+      ) : (
+        <p className="mt-4 text-[13px] text-ink-2">Day moves show up once live prices arrive for your holdings.</p>
+      )}
+    </div>
+  );
+}
+
 export default function Today() {
   const { mode, hasMine, openAdd, setMode } = useHoldr();
   const emptyMine = mode === 'mine' && !hasMine;
   return (
     <div className="view-enter">
       <Hero />
-      {mode === 'sample' && (
-        <div className="mt-8 flex flex-wrap items-center gap-3 text-[13px] text-ink-2">
-          <span>You're looking at a sample portfolio.</span>
-          <button onClick={hasMine ? () => setMode('mine') : openAdd} className="text-accent font-medium">{hasMine ? 'Switch to yours' : 'Import yours'}</button>
-        </div>
-      )}
       {emptyMine ? (
-        <section className="mt-10 card p-6 sm:p-8">
-          <EmptyState
-            title="Bring in what you hold"
-            body="Import a holdings file from your broker or add stocks one at a time. Holdr then tracks why you own each one, how it's doing against NIFTY and what it means for your tax."
-            action={<div className="flex gap-2"><Button onClick={openAdd}>Import holdings</Button><Button variant="ghost" onClick={() => setMode('sample')}>Explore the sample</Button></div>}
-          />
-        </section>
+        <>
+          <section className="mt-6 card p-6 sm:p-8">
+            <EmptyState
+              title="What do you hold?"
+              body="Import your broker’s holdings file or add stocks one at a time. Holdr keeps track of why you own each one and tells you when that changes."
+              action={<div className="flex gap-2"><Button onClick={openAdd}>Import holdings</Button><Button variant="ghost" onClick={() => setMode('sample')}>Explore the sample</Button></div>}
+            />
+          </section>
+          <section className="mt-4"><MarketContext /></section>
+        </>
       ) : (
         <>
-          <PortfolioSummary />
+          <section className="mt-8"><PortfolioSummary /></section>
           <section className="mt-6 grid lg:grid-cols-[1.55fr_1fr] gap-4">
             <PerformanceCard />
             <NeedsYou />
@@ -237,7 +263,6 @@ export default function Today() {
           {mode === 'sample' && <News />}
         </>
       )}
-      {emptyMine && <section className="mt-4"><MarketContext /></section>}
     </div>
   );
 }

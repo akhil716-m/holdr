@@ -7,7 +7,7 @@ export function moodFrom(dayChg) {
 }
 
 export const MOOD_COPY = {
-  bull: { name: 'Bull day', line: 'Buyers are in control.' },
-  bear: { name: 'Bear day', line: 'Sellers have the upper hand.' },
-  flat: { name: 'Sideways day', line: 'Neither side is pushing hard.' },
+  bull: { name: 'Bull day', line: 'Buyers ran the day.' },
+  bear: { name: 'Bear day', line: 'Sellers ran the day.' },
+  flat: { name: 'Sideways day', line: 'Nobody pushed hard either way.' },
 };

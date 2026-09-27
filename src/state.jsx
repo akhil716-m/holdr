@@ -94,7 +94,7 @@ export function HoldrProvider({ children }) {
         return next;
       });
       setModeState('mine');
-      flash(incoming.length === 1 ? `${incoming[0].symbol} added` : `Imported ${incoming.length} holdings`);
+      flash(incoming.length === 1 ? `${incoming[0].symbol} added. Now write down why.` : `Imported ${incoming.length} holdings. Next: why you own them.`);
       return added;
     },
     updateHolding: (id, patch) => setHoldings(prev => prev.map(h => (h.id === id ? { ...h, ...patch } : h))),
